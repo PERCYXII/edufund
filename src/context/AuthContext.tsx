@@ -310,7 +310,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // Ideally we might want to delete the auth user if this fails to keep clean state
             console.error("Profile creation failed:", profileError);
             setIsLoading(false);
-            return { success: false, error: "Account created but profile setup failed. Please contact support." };
+            return { success: false, error: `Account created but profile setup failed: ${profileError.message || JSON.stringify(profileError)}` };
         }
 
         setIsLoading(false);

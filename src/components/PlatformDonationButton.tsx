@@ -10,7 +10,7 @@ interface PlatformDonationButtonProps {
     className?: string;
 }
 
-const PAYSTACK_PUBLIC_KEY = 'pk_test_7a70161c3f2718d3ef9d6a8308fc1c677b4ca5be';
+const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_7a70161c3f2718d3ef9d6a8308fc1c677b4ca5be';
 
 const PlatformDonationButton: React.FC<PlatformDonationButtonProps> = ({ className }) => {
     const { user } = useAuth();
