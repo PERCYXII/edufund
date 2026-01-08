@@ -49,14 +49,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 .from('profiles')
                 .select('*')
                 .eq('id', sessionUser.id)
-                .single();
+                .maybeSingle();
 
-            if (profileError) throw profileError;
+            if (profileError) {
+                console.error("Error fetching profile from DB:", profileError);
+                // We typically continue to try metadata
+            }
 
-            let role = profile.role as 'student' | 'donor' | 'admin';
+            let role = profile?.role as 'student' | 'donor' | 'admin';
+
+            // Fallback: If profile doesn't exist or has no role, check Auth Metadata
+            if (!role && sessionUser.user_metadata?.role) {
+                console.log("Profile missing/empty, using metadata role:", sessionUser.user_metadata.role);
+                role = sessionUser.user_metadata.role;
+            }
 
             // Safety Check: If role is 'admin' but a student record exists, prefer 'student'.
-            // This fixes accounts that might have been incorrectly flagged as admin during registration.
             if (role === 'admin') {
                 const { data: studentCheck } = await supabase
                     .from('students')
@@ -67,8 +75,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 if (studentCheck) {
                     console.warn("User has Admin role but Student profile exists. Treating as Student.");
                     role = 'student';
-                    // Optional: Auto-correct DB? 
-                    // await supabase.from('profiles').update({ role: 'student' }).eq('id', sessionUser.id);
                 }
             }
 
@@ -78,6 +84,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 role: role,
             };
 
+            // Fetch extended data based on role
             if (role === 'student') {
                 const { data: student } = await supabase
                     .from('students')
@@ -102,6 +109,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         createdAt: student.created_at,
                         updatedAt: student.updated_at
                     };
+                } else {
+                    // If student record missing, we might want to scaffold a basic one or just leave it empty
+                    // so the UI knows they need to complete profile.
+                    // For now, leave 'userData.student' undefined.
                 }
             } else if (role === 'donor') {
                 const { data: donor } = await supabase
@@ -131,7 +142,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         } catch (error) {
             console.error("Error fetching user profile:", error);
-            // Don't set user to null here if we're just checking
+            // Even if DB fetching fails entirely, return a partial user from session if possible
+            if (sessionUser) {
+                const fallbackUser: User = {
+                    id: sessionUser.id,
+                    email: sessionUser.email,
+                    role: sessionUser.user_metadata?.role as any
+                };
+                setUser(fallbackUser);
+                return fallbackUser;
+            }
             return null;
         } finally {
             setIsLoading(false);
@@ -240,77 +260,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setIsLoading(true);
 
         // 1. Sign up with Supabase Auth
+        // We pass the role in metadata so the handle_new_user trigger works.
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
             password: data.password,
             options: {
-                data: { role: role } // This triggers the handle_new_user function
+                data: { role: role }
             }
         });
 
-        if (authError || !authData.user) {
+        if (authError) {
+            // Check if user already exists
+            if (authError.message.includes('User already registered') || authError.message.includes('already exists')) {
+                console.warn("User already registered. checking session...");
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (sessionData.session?.user) {
+                    // User is already logged in, proceed
+                    authData.user = sessionData.session.user as any;
+                } else {
+                    setIsLoading(false);
+                    return { success: false, error: "User already exists. Please login to continue." };
+                }
+            } else {
+                setIsLoading(false);
+                return { success: false, error: authError.message || 'Registration failed' };
+            }
+        }
+
+        if (!authData.user) {
             setIsLoading(false);
-            return { success: false, error: authError?.message || 'Registration failed' };
+            return { success: false, error: 'Registration failed - No user data returned' };
         }
 
         const userId = authData.user.id;
 
-        // FORCE update role in profiles to ensure it matches the requested role
-        // This handles cases where the DB trigger might default to 'admin' or fail to read metadata
-        const { error: roleChangeError } = await supabase
+        // 2. Ensure Profile Exists (Manual Fallback for Trigger)
+        // We explicitly insert/ignore to ensure the 'profiles' row exists immediately.
+        // This solves the issue where the trigger might fail or be slow.
+        const { error: profileError } = await supabase
             .from('profiles')
-            .update({ role: role })
-            .eq('id', userId);
+            .upsert({
+                id: userId,
+                email: data.email,
+                role: role
+            }, { onConflict: 'id' });
 
-        if (roleChangeError) {
-            console.warn("Could not force-update profile role:", roleChangeError);
-            // We continue, as the trigger might have worked anyway. 
-            // If it failed critically, the next steps (create_student_profile) might also fail or inconsistent state occurs.
+        if (profileError) {
+            console.warn("Manual profile creation warning (trigger might have handled it):", profileError);
         }
 
-        // 2. Create specific profile record
-        let profileError = null;
+        // 3. Role-specific logic
+        // For Students: We DO NOT create the 'students' record here anymore.
+        // The 'handle_new_user' trigger creates the base 'profiles' record.
+        // The user will complete their details in the /complete-profile page.
 
-        if (role === 'student') {
-            // Format expected_graduation from "YYYY-MM" to "YYYY-MM-01" (first of month)
-            const expectedGradDate = data.expectedGraduation
-                ? `${data.expectedGraduation}-01`
-                : null;
-
-            // Use RPC function to bypass RLS timing issues after signup
-            const { error } = await supabase.rpc('create_student_profile', {
-                p_id: userId,
-                p_first_name: data.firstName,
-                p_last_name: data.lastName,
-                p_phone: data.phone,
-                p_university_id: data.universityId,
-                p_student_number: data.studentNumber,
-                p_course: data.course,
-                p_year_of_study: data.yearOfStudy,
-                p_field_of_study: data.fieldOfStudy,
-                p_title: data.title,
-                p_expected_graduation: expectedGradDate,
-                p_email: data.email  // Ensure profile is created
-            });
-            profileError = error;
-        } else if (role === 'donor') {
-            // Use RPC function to bypass RLS timing issues after signup
+        // For Donors: We keep the existing logic for now as there isn't a separate flow yet.
+        if (role === 'donor') {
             const { error } = await supabase.rpc('create_donor_profile', {
                 p_id: userId,
                 p_first_name: data.firstName,
                 p_last_name: data.lastName,
                 p_is_anonymous: false,
-                p_email: data.email  // Ensure profile is created
+                p_email: data.email
             });
-            profileError = error;
-        }
 
-        if (profileError) {
-            // Rollback or handle partial failure? For now just return error
-            // Ideally we might want to delete the auth user if this fails to keep clean state
-            console.error("Profile creation failed:", profileError);
-            setIsLoading(false);
-            return { success: false, error: `Account created but profile setup failed: ${profileError.message || JSON.stringify(profileError)}` };
+            if (error) {
+                console.error("Donor profile creation failed:", error);
+                // We don't block auth success, but warn
+            }
         }
 
         setIsLoading(false);

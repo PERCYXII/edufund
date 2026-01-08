@@ -54,6 +54,22 @@ const StudentDashboard: React.FC = () => {
     const [showExtendModal, setShowExtendModal] = useState(false);
     const [extensionDays, setExtensionDays] = useState(30);
     const [isExtending, setIsExtending] = useState(false);
+    const [verificationCount, setVerificationCount] = useState<number | null>(null);
+
+    useEffect(() => {
+        const fetchVerificationStatus = async () => {
+            if (!user) return;
+            const { count, error } = await supabase
+                .from('verification_requests')
+                .select('*', { count: 'exact', head: true })
+                .eq('student_id', user.id);
+
+            if (!error) {
+                setVerificationCount(count);
+            }
+        };
+        fetchVerificationStatus();
+    }, [user]);
 
     const handleExtendCampaign = async () => {
         if (!campaign || !user) return;
@@ -451,6 +467,7 @@ const StudentDashboard: React.FC = () => {
                     {
                         activeTab === 'overview' && (
                             <>
+
                                 {/* Verification Status */}
                                 {user?.student?.verificationStatus === 'pending' && (
                                     <div className="alert alert-info">
@@ -462,7 +479,24 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 )}
 
-                                {user?.student?.verificationStatus === 'approved' && (
+                                {/* Restored Account / Missing Docs State */}
+                                {user?.student?.verificationStatus === 'approved' && verificationCount === 0 && (
+                                    <div className="alert alert-warning mb-6 border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r shadow-sm">
+                                        <div className="flex items-start gap-4">
+                                            <AlertCircle className="text-yellow-600 shrink-0" size={24} />
+                                            <div>
+                                                <h4 className="font-bold text-yellow-800 text-lg mb-1">Action Required: Re-submit Documents</h4>
+                                                <p className="text-yellow-700">
+                                                    It looks like your account was restored but your documents are missing.
+                                                    Please <strong>Create a Campaign</strong> to upload your verification documents (ID, Fee Statement, Enrollment) and restore your full account status.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Normal Verified State */}
+                                {user?.student?.verificationStatus === 'approved' && (verificationCount !== 0) && (
                                     <div className="alert alert-success">
                                         <CheckCircle size={24} />
                                         <div>

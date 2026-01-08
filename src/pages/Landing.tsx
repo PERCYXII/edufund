@@ -29,7 +29,12 @@ const heroImages = [
     '/images/tut-campus.png',
 ];
 
+import { useAuth } from '../context/AuthContext'; // Import Auth
+
+// ... existing imports
+
 const Landing: React.FC = () => {
+    const { isLoggedIn } = useAuth(); // Get auth state
     const [featuredCampaigns, setFeaturedCampaigns] = useState<CampaignWithStudent[]>([]);
     const [stats, setStats] = useState({
         totalFunded: 0,
@@ -196,9 +201,9 @@ const Landing: React.FC = () => {
                                 UP, and partner institutions – verified, transparent, and tax-deductible.
                             </p>
                             <div className="hero-buttons">
-                                <Link to="/register/student" className="btn btn-lg hero-btn-primary">
+                                <Link to={isLoggedIn ? "/dashboard" : "/register/student"} className="btn btn-lg hero-btn-primary">
                                     <GraduationCap size={24} />
-                                    Start Your Campaign
+                                    {isLoggedIn ? "Go to Dashboard" : "Start Your Campaign"}
                                 </Link>
                                 <Link to="/browse" className="btn btn-lg hero-btn-secondary">
                                     <Heart size={24} />
@@ -514,8 +519,8 @@ const Landing: React.FC = () => {
                         <h2 className="cta-title">Ready to Make a Difference?</h2>
                         <p className="cta-subtitle">Whether you're a student seeking funding or a donor wanting to help, join our community today.</p>
                         <div className="cta-buttons">
-                            <Link to="/register/student" className="btn btn-lg cta-btn-student" style={{ fontWeight: 600 }}>
-                                I'm a Student
+                            <Link to={isLoggedIn ? "/dashboard" : "/register/student"} className="btn btn-lg cta-btn-student" style={{ fontWeight: 600 }}>
+                                {isLoggedIn ? "Go to Dashboard" : "I'm a Student"}
                             </Link>
                             <Link to="/browse" className="btn btn-lg cta-btn-donor" style={{ fontWeight: 600 }}>
                                 I Want to Donate

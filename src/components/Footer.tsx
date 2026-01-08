@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, Facebook, Twitter, Linkedin, Copy } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import PlatformDonationButton from './PlatformDonationButton';
 import './Footer.css';
 
 const Footer: React.FC = () => {
+    const { isLoggedIn } = useAuth();
     const [showCopyTooltip, setShowCopyTooltip] = useState(false);
 
     const shareUrl = window.location.href; // Get current page URL
@@ -95,7 +97,7 @@ const Footer: React.FC = () => {
                         <h4 className="footer-heading">Platform</h4>
                         <ul className="footer-links">
                             <li><Link to="/browse">Browse Campaigns</Link></li>
-                            <li><Link to="/register/student">Start a Campaign</Link></li>
+                            <li><Link to={isLoggedIn ? "/dashboard" : "/register/student"}>{isLoggedIn ? "Go to Dashboard" : "Start a Campaign"}</Link></li>
                             <li><Link to="/how-it-works">How It Works</Link></li>
                         </ul>
                     </div>

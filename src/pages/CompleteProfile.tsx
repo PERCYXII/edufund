@@ -148,10 +148,27 @@ const CompleteProfile: React.FC = () => {
                 ? `${formData.expectedGraduation}-01`
                 : null;
 
-            // 1. Update Student Profile
+            // 0. ENSURE PROFILE EXISTS (Fix for missing profile trigger)
+            // Sometimes the handle_new_user trigger fails. We must ensure the profile exists
+            // before we can create a student record (FK constraint).
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: user.email,
+                    role: 'student'
+                }, { onConflict: 'id' });
+
+            if (profileError) {
+                console.error("Failed to ensure profile existence:", profileError);
+                // We continue, hoping it might exist or error will be caught below
+            }
+
+            // 1. Update Student Profile (Use UPSERT to create if missing)
             const { error: studentError } = await supabase
                 .from('students')
-                .update({
+                .upsert({
+                    id: user.id, // Explicitly include ID for upsert
                     first_name: formData.firstName,
                     last_name: formData.lastName,
                     phone: formData.phone || null,
@@ -161,8 +178,7 @@ const CompleteProfile: React.FC = () => {
                     year_of_study: formData.yearOfStudy,
                     expected_graduation: expectedGradDate,
                     verification_status: 'pending'
-                })
-                .eq('id', user.id);
+                });
 
             if (studentError) throw studentError;
 

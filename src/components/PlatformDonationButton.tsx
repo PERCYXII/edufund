@@ -31,13 +31,16 @@ const PlatformDonationButton: React.FC<PlatformDonationButtonProps> = ({ classNa
 
     const handlePaystack = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("Paystack: Button clicked", { amount, email });
 
         if (!amount || parseFloat(amount) <= 0) {
+            console.error("Paystack: Invalid amount");
             toastError("Invalid Amount", "Please enter a valid amount.");
             return;
         }
 
         if (!email) {
+            console.error("Paystack: No email");
             toastError("Email Required", "Please enter an email address for the receipt.");
             return;
         }
@@ -46,61 +49,73 @@ const PlatformDonationButton: React.FC<PlatformDonationButtonProps> = ({ classNa
         setLoading(true);
 
         const amountInCents = parseFloat(amount) * 100;
+        console.log("Paystack: Loading script for amount (cents):", amountInCents);
 
         // Dynamically load Paystack script
         const script = document.createElement('script');
         script.src = 'https://js.paystack.co/v1/inline.js';
         script.onload = () => {
-            const handler = (window as any).PaystackPop.setup({
-                key: PAYSTACK_PUBLIC_KEY,
-                email: email,
-                amount: amountInCents,
-                currency: 'ZAR',
-                ref: 'PLATFORM_' + Math.floor((Math.random() * 1000000000) + 1),
-                metadata: {
-                    custom_fields: [
-                        {
-                            display_name: "Donation Type",
-                            variable_name: "donation_type",
-                            value: "platform_support"
+            console.log("Paystack: Script loaded successfully");
+            try {
+                const handler = (window as any).PaystackPop.setup({
+                    key: PAYSTACK_PUBLIC_KEY,
+                    email: email,
+                    amount: amountInCents,
+                    currency: 'ZAR',
+                    ref: 'PLATFORM_' + Math.floor((Math.random() * 1000000000) + 1),
+                    metadata: {
+                        custom_fields: [
+                            {
+                                display_name: "Donation Type",
+                                variable_name: "donation_type",
+                                value: "platform_support"
+                            }
+                        ]
+                    },
+                    callback: async function (response: any) {
+                        console.log("Paystack: Payment successful", response);
+                        try {
+                            const { error: donationError } = await supabase
+                                .from('donations')
+                                .insert({
+                                    campaign_id: null, // Platform donation
+                                    amount: parseFloat(amount),
+                                    is_anonymous: !user,
+                                    payment_reference: response.reference,
+                                    proof_of_payment_url: 'paystack_ref_' + response.reference,
+                                    status: 'received', // Auto-verified since it's Paystack
+                                    guest_name: user ? `${user.student?.firstName} ${user.student?.lastName}`.trim() : 'Anonymous Donor',
+                                    guest_email: email || (user?.email)
+                                });
+
+                            if (donationError) throw donationError;
+
+                            success('Donation Successful', `Thank you for supporting UniFund! Ref: ${response.reference}`);
+                        } catch (err) {
+                            console.error("Error recording donation:", err);
+                            // Still show success since money was taken, but log error
+                            success('Donation Processed', `Thank you! Your donation was successful (Ref: ${response.reference}), but there was an issue recording it in our logs.`);
+                        } finally {
+                            setLoading(false);
+                            setAmount('50'); // Reset default
+                            if (!user) setEmail('');
                         }
-                    ]
-                },
-                callback: async function (response: any) {
-                    try {
-                        const { error: donationError } = await supabase
-                            .from('donations')
-                            .insert({
-                                campaign_id: null, // Platform donation
-                                amount: parseFloat(amount),
-                                is_anonymous: !user,
-                                payment_reference: response.reference,
-                                proof_of_payment_url: 'paystack_ref_' + response.reference,
-                                status: 'received', // Auto-verified since it's Paystack
-                                guest_name: user ? `${user.student?.firstName} ${user.student?.lastName}`.trim() : 'Anonymous Donor',
-                                guest_email: email || (user?.email)
-                            });
-
-                        if (donationError) throw donationError;
-
-                        success('Donation Successful', `Thank you for supporting UniFund! Ref: ${response.reference}`);
-                    } catch (err) {
-                        console.error("Error recording donation:", err);
-                        // Still show success since money was taken, but log error
-                        success('Donation Processed', `Thank you! Your donation was successful (Ref: ${response.reference}), but there was an issue recording it in our logs.`);
-                    } finally {
+                    },
+                    onClose: function () {
+                        console.log("Paystack: Modal closed");
                         setLoading(false);
-                        setAmount('50'); // Reset default
-                        if (!user) setEmail('');
                     }
-                },
-                onClose: function () {
-                    setLoading(false);
-                }
-            });
-            handler.openIframe();
+                });
+                console.log("Paystack: Opening iframe");
+                handler.openIframe();
+            } catch (err) {
+                console.error("Paystack: Error initializing", err);
+                toastError("Error", "Could not initialize payment processor");
+                setLoading(false);
+            }
         };
-        script.onerror = () => {
+        script.onerror = (e) => {
+            console.error("Paystack: Script failed to load", e);
             toastError("Error", "Failed to load payment processor");
             setLoading(false);
         };

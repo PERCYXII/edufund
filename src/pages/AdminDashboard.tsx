@@ -29,6 +29,7 @@ import { useToast } from '../context/ToastContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import { supabase } from '../lib/supabase';
 import type { VerificationRequest, Student, University, CampaignWithStudent } from '../types';
+import DocumentViewerModal from '../components/DocumentViewerModal';
 import './AdminDashboard.css';
 
 const REJECTION_REASONS = [
@@ -74,6 +75,11 @@ const AdminDashboard: React.FC = () => {
     const [rejectingId, setRejectingId] = useState<string | null>(null);
     const [selectedReason, setSelectedReason] = useState<string>('');
 
+    // Document Viewer State
+    const [viewerOpen, setViewerOpen] = useState(false);
+    const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+    const [viewerTitle, setViewerTitle] = useState('Document Preview');
+
 
     // Redirect if not admin
     // Redirect if not logged in
@@ -113,9 +119,22 @@ const AdminDashboard: React.FC = () => {
                 })
                 .subscribe();
 
+            // Subscribe to verification request changes
+            const verifChannel = supabase
+                .channel('admin-verif-changes')
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'verification_requests'
+                }, () => {
+                    fetchDashboardData();
+                })
+                .subscribe();
+
             return () => {
                 supabase.removeChannel(channel);
                 supabase.removeChannel(campaignChannel);
+                supabase.removeChannel(verifChannel);
             };
         } else if (!authLoading && (!user || user.role !== 'admin')) {
             setLoading(false);
@@ -188,7 +207,7 @@ const AdminDashboard: React.FC = () => {
                 documentType: v.document_type,
                 documentUrl: v.document_url,
                 idUrl: v.id_url,
-                enrollmentUrl: v.enroll_url,
+                enrollmentUrl: v.enrollment_url,
                 transcriptUrl: v.academic_record_url,
                 feeStatementUrl: v.fee_statement_url,
                 status: v.status,
@@ -238,28 +257,48 @@ const AdminDashboard: React.FC = () => {
 
             // Process Pending
             if (pendingData) {
-                const mappedPending: any[] = pendingData.map((c: any) => ({
-                    id: c.id,
-                    studentId: c.student_id,
-                    goal: c.goal_amount || 0,
-                    raised: c.raised_amount || 0,
-                    isUrgent: c.is_urgent,
-                    title: c.title,
-                    status: c.status,
-                    images: c.images,
-                    feeStatementUrl: c.fee_statement_url,
-                    idUrl: c.id_url,
-                    enrollmentUrl: c.enrollment_url,
-                    invoiceUrl: c.invoice_url,
-                    student: {
-                        firstName: c.student?.first_name || 'Unknown',
-                        lastName: c.student?.last_name || 'Student',
-                        course: c.student?.course || 'N/A',
-                        studentNumber: c.student?.student_number || 'N/A',
-                        email: c.student?.email || 'N/A',
-                        universityName: c.student?.university?.name || 'Unknown'
-                    }
-                }));
+                // Fetch verification docs for these students to display in the dashboard
+                const studentIds = pendingData.map((c: any) => c.student_id).filter(id => id);
+
+                let campaignDocs: any[] = [];
+                if (studentIds.length > 0) {
+                    const { data: docs } = await supabase
+                        .from('verification_requests')
+                        .select('student_id, id_url, enrollment_url, academic_record_url, fee_statement_url')
+                        .in('student_id', studentIds)
+                        .order('created_at', { ascending: false });
+
+                    if (docs) campaignDocs = docs;
+                }
+
+                const mappedPending: any[] = pendingData.map((c: any) => {
+                    // Find matching docs (stats with most recent due to order)
+                    const doc = campaignDocs.find(d => d.student_id === c.student_id);
+
+                    return {
+                        id: c.id,
+                        studentId: c.student_id,
+                        goal: c.goal_amount || 0,
+                        raised: c.raised_amount || 0,
+                        isUrgent: c.is_urgent,
+                        title: c.title,
+                        status: c.status,
+                        images: c.images,
+                        // Use campaign specific doc if available, otherwise fallback to student verification doc
+                        feeStatementUrl: c.fee_statement_url || doc?.fee_statement_url,
+                        idUrl: c.id_url || doc?.id_url,
+                        enrollmentUrl: c.enrollment_url || doc?.enrollment_url,
+                        invoiceUrl: c.invoice_url,
+                        student: {
+                            firstName: c.student?.first_name || 'Unknown',
+                            lastName: c.student?.last_name || 'Student',
+                            course: c.student?.course || 'N/A',
+                            studentNumber: c.student?.student_number || 'N/A',
+                            email: c.student?.email || 'N/A',
+                            universityName: c.student?.university?.name || 'Unknown'
+                        }
+                    };
+                });
                 setPendingCampaigns(mappedPending);
             }
 
@@ -438,13 +477,23 @@ const AdminDashboard: React.FC = () => {
 
             if (reqError) throw reqError;
 
-            // Update student status
+            // Get verification details to find student ID
             const verification = verifications.find(v => v.id === rejectingId);
+
             if (verification?.studentId) {
+                // Update student status
                 await supabase
                     .from('students')
                     .update({ verification_status: 'rejected' })
                     .eq('id', verification.studentId);
+
+                // Automatically reject any pending campaigns for this student
+                // since their identity/verification was rejected
+                await supabase
+                    .from('campaigns')
+                    .update({ status: 'rejected' })
+                    .eq('student_id', verification.studentId)
+                    .eq('status', 'pending');
             }
 
             setVerifications(prev => prev.filter(v => v.id !== rejectingId));
@@ -452,6 +501,9 @@ const AdminDashboard: React.FC = () => {
             setRejectingId(null);
             setSelectedReason('');
             toast.success("Verification rejected.");
+
+            // Refresh to see campaign status changes
+            fetchDashboardData();
         } catch (error) {
             console.error("Error rejecting verification:", error);
             toast.error("Failed to reject verification.");
@@ -600,7 +652,15 @@ const AdminDashboard: React.FC = () => {
 
             if (studError) console.error("Error verifying student:", studError);
 
-            // 3. Notify student
+            // 3. Auto-approve any pending verification requests for this student
+            // This ensures they are removed from the "Pending Verifications" list
+            await supabase
+                .from('verification_requests')
+                .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+                .eq('student_id', campaign.studentId)
+                .eq('status', 'pending');
+
+            // 4. Notify student
             await supabase.from('notifications').insert({
                 user_id: campaign.studentId,
                 title: 'Campaign Approved!',
@@ -638,8 +698,6 @@ const AdminDashboard: React.FC = () => {
             if (campError) throw campError;
 
             // 2. Reject Student (Verification)
-            // We set it to rejected so they know they need to fix things.
-            // When they delete the rejected campaign, the trigger will reset them to 'pending'.
             const { error: studError } = await supabase
                 .from('students')
                 .update({ verification_status: 'rejected' })
@@ -647,7 +705,18 @@ const AdminDashboard: React.FC = () => {
 
             if (studError) console.error("Error rejecting student:", studError);
 
-            // 3. Notify student
+            // 3. Auto-reject pending verification requests
+            await supabase
+                .from('verification_requests')
+                .update({
+                    status: 'rejected',
+                    rejection_reason: `Campaign rejected: ${reason}`,
+                    reviewed_at: new Date().toISOString()
+                })
+                .eq('student_id', campaign.studentId)
+                .eq('status', 'pending');
+
+            // 4. Notify student
             await supabase.from('notifications').insert({
                 user_id: campaign.studentId,
                 title: 'Campaign Rejected',
@@ -708,7 +777,7 @@ const AdminDashboard: React.FC = () => {
     };
 
 
-    const handleViewDocument = async (urlOrPath: string) => {
+    const handleViewDocument = async (urlOrPath: string, docTitle: string = 'Document Preview') => {
         if (!urlOrPath) return;
 
         let bucket = 'documents';
@@ -739,7 +808,9 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
 
             if (data?.signedUrl) {
-                window.open(data.signedUrl, '_blank');
+                setViewerUrl(data.signedUrl);
+                setViewerTitle(docTitle);
+                setViewerOpen(true);
             } else {
                 toast.error("Could not generate secure link for this document.");
             }
@@ -1214,9 +1285,31 @@ const AdminDashboard: React.FC = () => {
                                                         </td>
                                                         <td className="font-bold">R{campaign.goal.toLocaleString()}</td>
                                                         <td>
-                                                            <span className={`campaign-type-badge ${campaign.isUrgent ? 'urgent' : 'standard'}`}>
-                                                                {campaign.isUrgent ? 'Quick Assist' : 'Standard'}
-                                                            </span>
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className={`campaign-type-badge ${campaign.isUrgent ? 'urgent' : 'standard'}`}>
+                                                                    {campaign.isUrgent ? 'Quick Assist' : 'Standard'}
+                                                                </span>
+                                                                <div className="flex gap-1 mt-1">
+                                                                    {campaign.idUrl && (
+                                                                        <button
+                                                                            className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300 flex items-center gap-1"
+                                                                            onClick={() => handleViewDocument(campaign.idUrl!, "ID Document")}
+                                                                            title="View ID"
+                                                                        >
+                                                                            <FileText size={10} /> ID
+                                                                        </button>
+                                                                    )}
+                                                                    {campaign.feeStatementUrl && (
+                                                                        <button
+                                                                            className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300 flex items-center gap-1"
+                                                                            onClick={() => handleViewDocument(campaign.feeStatementUrl!, "Fee Statement")}
+                                                                            title="View Fee Statement"
+                                                                        >
+                                                                            <FileText size={10} /> Fees
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             <div className="action-buttons">
@@ -1839,6 +1932,13 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <DocumentViewerModal
+                isOpen={viewerOpen}
+                onClose={() => setViewerOpen(false)}
+                url={viewerUrl}
+                title={viewerTitle}
+            />
         </div>
     );
 };

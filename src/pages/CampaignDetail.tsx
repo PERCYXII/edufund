@@ -22,6 +22,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { DONATION_AMOUNTS } from '../data/constants';
 import type { CampaignWithStudent } from '../types';
+import DocumentViewerModal from '../components/DocumentViewerModal';
 import './CampaignDetail.css';
 import '../components/Skeleton.css';
 
@@ -370,6 +371,11 @@ const CampaignDetail: React.FC = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedAmount, setSelectedAmount] = useState(0);
 
+    // Document Viewer State
+    const [viewerOpen, setViewerOpen] = useState(false);
+    const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+    const [viewerTitle, setViewerTitle] = useState('Document Preview');
+
     const handleAdminApprove = async () => {
         if (!campaign || !id) return;
         if (!confirm("Are you sure you want to approve this campaign and verify the student?")) return;
@@ -391,7 +397,14 @@ const CampaignDetail: React.FC = () => {
 
             if (studError) console.error("Error verifying student:", studError);
 
-            // 3. Notify
+            // 3. Auto-approve pending verification requests
+            await supabase
+                .from('verification_requests')
+                .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+                .eq('student_id', campaign.studentId)
+                .eq('status', 'pending');
+
+            // 4. Notify
             await supabase.from('notifications').insert({
                 user_id: campaign.studentId,
                 title: 'Campaign Approved!',
@@ -430,6 +443,17 @@ const CampaignDetail: React.FC = () => {
 
             if (studError) console.error("Error rejecting student:", studError);
 
+            // 3. Auto-reject pending verification requests
+            await supabase
+                .from('verification_requests')
+                .update({
+                    status: 'rejected',
+                    rejection_reason: `Campaign rejected: ${reason}`,
+                    reviewed_at: new Date().toISOString()
+                })
+                .eq('student_id', campaign.studentId)
+                .eq('status', 'pending');
+
             await supabase.from('notifications').insert({
                 user_id: campaign.studentId,
                 title: 'Campaign Rejected',
@@ -445,7 +469,7 @@ const CampaignDetail: React.FC = () => {
         }
     };
 
-    const handleViewDocument = async (urlOrPath: string) => {
+    const handleViewDocument = async (urlOrPath: string, docTitle: string = 'Document Preview') => {
         if (!urlOrPath) return;
 
         let bucket = 'documents';
@@ -475,7 +499,9 @@ const CampaignDetail: React.FC = () => {
 
             if (error) throw error;
             if (data?.signedUrl) {
-                window.open(data.signedUrl, '_blank');
+                setViewerUrl(data.signedUrl);
+                setViewerTitle(docTitle);
+                setViewerOpen(true);
             }
         } catch (err: any) {
             console.error("Error viewing document:", err);
@@ -725,20 +751,20 @@ const CampaignDetail: React.FC = () => {
 
                         {/* Admin Verification Panel */}
                         {user?.role === 'admin' && (
-                            <div className="detail-card mb-8 border-2 border-purple-500 overflow-hidden shadow-lg">
-                                <div className="bg-purple-700 p-4 flex justify-between items-center text-white">
+                            <div className="detail-card mb-8 rounded-xl overflow-hidden shadow-lg border border-gray-200">
+                                <div className="bg-[#234563] p-5 flex justify-between items-center text-white">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                                        <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
                                             <Shield size={24} className="text-white" />
                                         </div>
                                         <div>
                                             <h3 className="text-xl font-bold m-0 text-white">Verification Needed</h3>
-                                            <p className="text-purple-100 text-sm m-0 opacity-90">Review documents below</p>
+                                            <p className="text-blue-100/80 text-sm m-0">Review documents below</p>
                                         </div>
                                     </div>
-                                    <span className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize tracking-wide ${campaign.status === 'active' ? 'bg-green-500 text-white' :
-                                        campaign.status === 'pending' ? 'bg-yellow-400 text-yellow-900' :
-                                            'bg-gray-200 text-gray-800'
+                                    <span className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize tracking-wide shadow-sm border border-white/20 ${campaign.status === 'active' ? 'bg-green-600 text-white' :
+                                        campaign.status === 'pending' ? 'bg-yellow-500 text-white' :
+                                            'bg-gray-600 text-gray-200'
                                         }`}>
                                         {campaign.status}
                                     </span>
@@ -747,56 +773,56 @@ const CampaignDetail: React.FC = () => {
                                 <div className="p-6 bg-white">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                                         {campaign.feeStatementUrl && (
-                                            <div onClick={() => handleViewDocument(campaign.feeStatementUrl!)}
-                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer">
-                                                <div className="p-3 bg-blue-100 text-blue-600 rounded-lg group-hover:bg-blue-200 transition-colors">
+                                            <div onClick={() => handleViewDocument(campaign.feeStatementUrl!, 'Fee Statement')}
+                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-[#234563] hover:bg-gray-50 transition-all cursor-pointer">
+                                                <div className="p-3 bg-blue-50 text-[#234563] rounded-lg group-hover:bg-[#234563] group-hover:text-white transition-colors">
                                                     <FileText size={24} />
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="font-bold text-gray-900 mb-1">Fee Statement</div>
-                                                    <div className="text-sm text-blue-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                    <div className="text-sm text-gray-500 font-medium flex items-center gap-1 group-hover:text-[#234563] transition-colors">
                                                         View Document <ExternalLink size={12} />
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
                                         {campaign.idUrl && (
-                                            <div onClick={() => handleViewDocument(campaign.idUrl!)}
-                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-purple-400 hover:bg-purple-50/50 transition-all cursor-pointer">
-                                                <div className="p-3 bg-purple-100 text-purple-600 rounded-lg group-hover:bg-purple-200 transition-colors">
+                                            <div onClick={() => handleViewDocument(campaign.idUrl!, 'ID Document')}
+                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-[#234563] hover:bg-gray-50 transition-all cursor-pointer">
+                                                <div className="p-3 bg-blue-50 text-[#234563] rounded-lg group-hover:bg-[#234563] group-hover:text-white transition-colors">
                                                     <FileText size={24} />
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="font-bold text-gray-900 mb-1">ID Document</div>
-                                                    <div className="text-sm text-purple-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                    <div className="text-sm text-gray-500 font-medium flex items-center gap-1 group-hover:text-[#234563] transition-colors">
                                                         View Document <ExternalLink size={12} />
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
                                         {campaign.enrollmentUrl && (
-                                            <div onClick={() => handleViewDocument(campaign.enrollmentUrl!)}
-                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-green-400 hover:bg-green-50/50 transition-all cursor-pointer">
-                                                <div className="p-3 bg-green-100 text-green-600 rounded-lg group-hover:bg-green-200 transition-colors">
+                                            <div onClick={() => handleViewDocument(campaign.enrollmentUrl!, 'Proof of Enrollment')}
+                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-[#234563] hover:bg-gray-50 transition-all cursor-pointer">
+                                                <div className="p-3 bg-blue-50 text-[#234563] rounded-lg group-hover:bg-[#234563] group-hover:text-white transition-colors">
                                                     <FileText size={24} />
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="font-bold text-gray-900 mb-1">Proof of Enrollment</div>
-                                                    <div className="text-sm text-green-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                    <div className="text-sm text-gray-500 font-medium flex items-center gap-1 group-hover:text-[#234563] transition-colors">
                                                         View Document <ExternalLink size={12} />
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
                                         {campaign.invoiceUrl && (
-                                            <div onClick={() => handleViewDocument(campaign.invoiceUrl!)}
-                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-orange-400 hover:bg-orange-50/50 transition-all cursor-pointer">
-                                                <div className="p-3 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-200 transition-colors">
+                                            <div onClick={() => handleViewDocument(campaign.invoiceUrl!, 'Invoice / Quote')}
+                                                className="group flex items-start gap-4 p-4 rounded-xl border border-gray-200 hover:border-[#234563] hover:bg-gray-50 transition-all cursor-pointer">
+                                                <div className="p-3 bg-blue-50 text-[#234563] rounded-lg group-hover:bg-[#234563] group-hover:text-white transition-colors">
                                                     <FileText size={24} />
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="font-bold text-gray-900 mb-1">Invoice / Quote</div>
-                                                    <div className="text-sm text-orange-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                    <div className="text-sm text-gray-500 font-medium flex items-center gap-1 group-hover:text-[#234563] transition-colors">
                                                         View Document <ExternalLink size={12} />
                                                     </div>
                                                 </div>
@@ -804,24 +830,20 @@ const CampaignDetail: React.FC = () => {
                                         )}
                                     </div>
 
-                                    <div className="flex gap-4 pt-6 border-t border-gray-100">
-                                        <button
-                                            onClick={handleAdminApprove}
-                                            disabled={campaign.status === 'active'}
-                                            className="flex-1 py-2 px-4 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                                            style={{ backgroundColor: '#059669', boxShadow: '0 4px 14px 0 rgba(16, 185, 129, 0.39)' }}
-                                        >
-                                            <CheckCircle size={18} />
-                                            Approve Campaign
-                                        </button>
+                                    <div className="flex gap-4 border-t pt-6 bg-gray-50 -mx-6 -mb-6 p-6">
                                         <button
                                             onClick={handleAdminReject}
                                             disabled={campaign.status === 'rejected'}
-                                            className="flex-1 py-2 px-4 rounded-xl font-bold text-red-700 text-sm flex items-center justify-center gap-2 transition-all hover:bg-red-50 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                                            style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}
+                                            className="flex-1 btn bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-50"
                                         >
-                                            <XCircle size={18} />
-                                            Reject
+                                            <XCircle size={20} /> Reject
+                                        </button>
+                                        <button
+                                            onClick={handleAdminApprove}
+                                            disabled={campaign.status === 'active' && campaign.student.verificationStatus === 'approved'}
+                                            className="flex-1 btn bg-[#234563] text-white hover:bg-[#1a3549] shadow-md hover:shadow-lg transform transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+                                        >
+                                            <CheckCircle size={20} /> Approve & Verify
                                         </button>
                                     </div>
                                 </div>
@@ -1070,6 +1092,14 @@ const CampaignDetail: React.FC = () => {
                     }}
                 />
             )}
+
+
+            <DocumentViewerModal
+                isOpen={viewerOpen}
+                onClose={() => setViewerOpen(false)}
+                url={viewerUrl}
+                title={viewerTitle}
+            />
         </div>
     );
 };
