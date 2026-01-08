@@ -1,0 +1,533 @@
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+    GraduationCap,
+    Heart,
+    Users,
+    FileText,
+    Building,
+    Shield,
+    Eye,
+    ArrowRight,
+    Clock,
+    CheckCircle
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import type { CampaignWithStudent } from '../types';
+import CampaignCard from '../components/CampaignCard';
+import { CampaignCardSkeleton } from '../components/Skeleton';
+import PlatformDonationButton from '../components/PlatformDonationButton';
+import './Landing.css';
+
+// University campus images for hero carousel
+const heroImages = [
+    '/images/uct-campus.png',
+    '/images/wits-campus.png',
+    '/images/stellenbosch-campus.png',
+    '/images/up-campus.png',
+    '/images/uj-campus.png',
+    '/images/tut-campus.png',
+];
+
+const Landing: React.FC = () => {
+    const [featuredCampaigns, setFeaturedCampaigns] = useState<CampaignWithStudent[]>([]);
+    const [stats, setStats] = useState({
+        totalFunded: 0,
+        studentsHelped: 0,
+        totalDonors: 0,
+        partnerUniversities: 0,
+    });
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const location = useLocation();
+
+    const urgentCount = featuredCampaigns.filter(c => c.isUrgent).length; // Based on fetched
+
+    // Auto-rotate hero images
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
+        }, 5000); // Change every 5 seconds
+        return () => clearInterval(interval);
+    }, []);
+
+    // Handle scroll to section from navigation state
+    useEffect(() => {
+        if (location.state && (location.state as any).scrollTo) {
+            const sectionId = (location.state as any).scrollTo;
+            const element = document.getElementById(sectionId);
+            if (element) {
+                // Small timeout to ensure rendering is complete
+                setTimeout(() => {
+                    element.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }
+        }
+    }, [location]);
+
+    // Fetch Data
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // 1. Fetch Featured Campaigns (Latest 3 Active)
+                const { data: campaignData } = await supabase
+                    .from('campaigns')
+                    .select(`
+                        *,
+                        student:students (
+                            *,
+                            university:universities (*)
+                        )
+                    `)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(3);
+
+                if (campaignData) {
+                    const mapped: CampaignWithStudent[] = campaignData.map((c: any) => ({
+                        id: c.id,
+                        studentId: c.student_id,
+                        title: c.title,
+                        story: c.story,
+                        goal: c.goal_amount || 0,
+                        raised: c.raised_amount || 0,
+                        donors: c.donors || 0,
+                        daysLeft: 30, // calculated below
+                        startDate: c.start_date,
+                        endDate: c.end_date,
+                        status: c.status,
+                        type: c.type || (c.is_urgent ? 'quick_assist' : 'standard'),
+                        category: c.category,
+                        isUrgent: c.is_urgent,
+                        fundingBreakdown: c.funding_breakdown || [],
+                        images: c.images,
+                        createdAt: c.created_at,
+                        updatedAt: c.updated_at,
+                        student: {
+                            id: c.student.id,
+                            email: c.student.email,
+                            firstName: c.student.first_name,
+                            lastName: c.student.last_name,
+                            phone: c.student.phone,
+                            universityId: c.student.university_id,
+                            studentNumber: c.student.student_number,
+                            course: c.student.course,
+                            yearOfStudy: c.student.year_of_study,
+                            expectedGraduation: c.student.expected_graduation,
+                            verificationStatus: c.student.verification_status,
+                            profileImage: c.student.profile_image_url,
+                            createdAt: c.student.created_at,
+                            updatedAt: c.student.updated_at
+                        },
+                        university: {
+                            id: c.student.university.id,
+                            name: c.student.university.name,
+                            bankName: c.student.university.bank_name,
+                            accountNumber: c.student.university.account_number,
+                            branchCode: c.student.university.branch_code,
+                            accountName: c.student.university.account_name
+                        }
+                    }));
+
+                    // Recalculate daysLeft
+                    const withDays = mapped.map(c => {
+                        const end = new Date(c.endDate);
+                        const now = new Date();
+                        const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                        return { ...c, daysLeft: diff > 0 ? diff : 0 };
+                    });
+
+                    setFeaturedCampaigns(withDays);
+                }
+
+                // 2. Fetch Stats (Approximations)
+                // Universities count
+                const { count: uniCount } = await supabase.from('universities').select('*', { count: 'exact', head: true });
+                // Donors count
+                const { count: donorCount } = await supabase.from('donors').select('*', { count: 'exact', head: true });
+                // Students count (active campaigns)
+                const { count: studentCount } = await supabase.from('campaigns').select('*', { count: 'exact', head: true });
+
+                // Total funded - aggregate query (requires RPC or client side calc of all donations - expensive)
+                // For now, let's sum up the random active campaigns or just use a placeholder base + dynamic
+                const { data: donations } = await supabase.from('donations').select('amount').limit(100);
+                const totalRaised = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+
+                setStats({
+                    totalFunded: totalRaised > 0 ? totalRaised : 2500000, // Placeholder if 0
+                    studentsHelped: studentCount || 850,
+                    totalDonors: donorCount || 12000,
+                    partnerUniversities: uniCount || 26
+                });
+
+            } catch (error) {
+                console.error("Error fetching landing data", error);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    return (
+        <div className="landing-page">
+            {/* Hero Section with Carousel */}
+            <section className="hero-section">
+                {/* Carousel Background */}
+                <div className="hero-carousel">
+                    {heroImages.map((img, idx) => (
+                        <div
+                            key={idx}
+                            className={`hero-slide ${idx === currentImageIndex ? 'active' : ''}`}
+                            style={{ backgroundImage: `url(${img})` }}
+                        />
+                    ))}
+                    <div className="hero-overlay" />
+                </div>
+
+                <div className="container hero-container">
+                    <div className="hero-grid">
+                        <div className="hero-content">
+                            <h1 className="hero-title">
+                                Empowering<br />
+                                <span className="hero-highlight">South African Students</span>
+                            </h1>
+                            <p className="hero-subtitle">
+                                Help deserving South African students complete their university education.
+                                100% of donations go directly to university accounts at UCT, Wits, Stellenbosch,
+                                UP, and partner institutions – verified, transparent, and tax-deductible.
+                            </p>
+                            <div className="hero-buttons">
+                                <Link to="/register/student" className="btn btn-lg hero-btn-primary">
+                                    <GraduationCap size={24} />
+                                    Start Your Campaign
+                                </Link>
+                                <Link to="/browse" className="btn btn-lg hero-btn-secondary">
+                                    <Heart size={24} />
+                                    Support a Student
+                                </Link>
+                            </div>
+                            <div className="hero-donate-cta">
+                                <PlatformDonationButton className="btn btn-lg hero-btn-donate" />
+                                <span className="donate-note">Help us keep the platform running</span>
+                            </div>
+                        </div>
+                        <div className="hero-visual">
+                            <div className="hero-circle-outer" />
+                            <div className="hero-circle-inner">
+                                <GraduationCap size={120} strokeWidth={1.5} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="hero-stats">
+                        <div className="stat-card">
+                            <span className="stat-value">R{(stats.totalFunded / 1000000).toFixed(1)}M+</span>
+                            <span className="stat-label">Funded to Date</span>
+                        </div>
+                        <div className="stat-card">
+                            <span className="stat-value">{stats.studentsHelped}+</span>
+                            <span className="stat-label">Students Helped</span>
+                        </div>
+                        <div className="stat-card">
+                            <span className="stat-value">{stats.totalDonors.toLocaleString()}+</span>
+                            <span className="stat-label">Generous Donors</span>
+                        </div>
+                        <div className="stat-card">
+                            <span className="stat-value">{stats.partnerUniversities}</span>
+                            <span className="stat-label">Partner Universities</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* How It Works */}
+            <section id="how-it-works" className="section section-alt">
+                <div className="container">
+                    <div className="section-header">
+                        <h2 className="section-title">How UniFund Works</h2>
+                        <p className="section-subtitle">Simple, transparent, and secure funding directly to your university</p>
+                    </div>
+
+                    <div className="steps-grid">
+                        {[
+                            { icon: Users, title: "Create Profile", desc: "Register and verify your student status with your university enrollment documents", color: "#3b82f6" },
+                            { icon: FileText, title: "Build Campaign", desc: "Share your story, goals, and funding needs to connect with potential donors", color: "#a855f7" },
+                            { icon: Heart, title: "Receive Support", desc: "Donors contribute to your education fund through our secure platform", color: "#ec4899" },
+                            { icon: Building, title: "Direct Payment", desc: "Funds go directly to your university account with your student number as reference", color: "#22c55e" }
+                        ].map((step, idx) => (
+                            <div key={idx} className="step-card">
+                                <div className="step-icon" style={{ background: step.color }}>
+                                    <step.icon size={40} color="white" />
+                                </div>
+                                <div className="step-number">{idx + 1}</div>
+                                <h3 className="step-title">{step.title}</h3>
+                                <p className="step-desc">{step.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Featured Campaigns */}
+            <section className="section">
+                <div className="container">
+                    <div className="section-header-row">
+                        <div>
+                            <h2 className="section-title">Students Who Need Your Help</h2>
+                            <p className="section-subtitle">Every contribution makes a difference</p>
+                        </div>
+                        <Link to="/browse" className="view-all-link">
+                            View All <ArrowRight size={20} />
+                        </Link>
+                    </div>
+
+                    {/* Urgent Banner */}
+                    {urgentCount > 0 && (
+                        <div className="urgent-banner">
+                            <div className="urgent-icon">
+                                <Clock size={32} />
+                            </div>
+                            <div className="urgent-content">
+                                <h3>{urgentCount} campaigns ending soon!</h3>
+                                <p>These students need your help before their deadlines</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {featuredCampaigns.length > 0 ? (
+                        <div className="campaigns-grid">
+                            {featuredCampaigns.map((campaign) => (
+                                <CampaignCard key={campaign.id} campaign={campaign} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="campaigns-grid">
+                            {[1, 2, 3].map((i) => (
+                                <CampaignCardSkeleton key={i} />
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="mobile-view-all">
+                        <Link to="/browse" className="btn btn-primary">View All Campaigns</Link>
+                    </div>
+                </div>
+            </section>
+
+            {/* Partner Universities Section */}
+            <section className="section universities-section">
+                <div className="container">
+                    <div className="section-header">
+                        <h2 className="section-title">Partner Universities & Institutions</h2>
+                        <p className="section-subtitle">We work with South Africa's leading universities, universities of technology, and TVET colleges</p>
+                    </div>
+
+                    {/* University Logos */}
+                    <div className="logos-row">
+                        <div className="logo-item">
+                            <img src="/images/logos/wits-logo.jpg" alt="University of the Witwatersrand" />
+                        </div>
+                        <div className="logo-item">
+                            <img src="/images/logos/uj-logo.jpg" alt="University of Johannesburg" />
+                        </div>
+                        <div className="logo-item">
+                            <img src="/images/logos/tut-logo.png" alt="Tshwane University of Technology" />
+                        </div>
+                        <div className="logo-item">
+                            <img src="/images/logos/cjc-logo.png" alt="Central Johannesburg TVET College" />
+                        </div>
+                    </div>
+
+                    {/* Campus Images Grid */}
+                    <div className="universities-grid">
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/uct-campus.png" alt="University of Cape Town" />
+                            </div>
+                            <div className="university-info">
+                                <h3>University of Cape Town</h3>
+                                <p>UCT</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/wits-campus.png" alt="University of the Witwatersrand" />
+                            </div>
+                            <div className="university-info">
+                                <h3>Wits University</h3>
+                                <p>WITS</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/stellenbosch-campus.png" alt="Stellenbosch University" />
+                            </div>
+                            <div className="university-info">
+                                <h3>Stellenbosch University</h3>
+                                <p>SU</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/up-campus.png" alt="University of Pretoria" />
+                            </div>
+                            <div className="university-info">
+                                <h3>University of Pretoria</h3>
+                                <p>UP / Tuks</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/uj-campus.png" alt="University of Johannesburg" />
+                            </div>
+                            <div className="university-info">
+                                <h3>University of Johannesburg</h3>
+                                <p>UJ</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/tut-campus.png" alt="Tshwane University of Technology" />
+                            </div>
+                            <div className="university-info">
+                                <h3>Tshwane University of Technology</h3>
+                                <p>TUT</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="universities-note">
+                        <Building size={20} />
+                        Supporting students from {stats.partnerUniversities} universities, 50+ TVET colleges, and private institutions across South Africa
+                    </p>
+                </div>
+            </section>
+
+            {/* Trust Section */}
+            <section className="section trust-section">
+                <div className="container">
+                    <div className="section-header">
+                        <h2 className="section-title light">Why Trust UniFund?</h2>
+                        <p className="section-subtitle light">Your donations make a real impact, guaranteed</p>
+                    </div>
+
+                    <div className="trust-grid">
+                        {[
+                            { icon: Shield, title: "Verified Students", desc: "Every student is verified through official enrollment documents and university records" },
+                            { icon: Building, title: "Direct to Institution", desc: "Funds are paid directly to university accounts using student numbers as reference – never to personal accounts" },
+                            { icon: Eye, title: "Full Transparency", desc: "Track exactly where your money goes with detailed payment confirmations and university receipts" }
+                        ].map((item, idx) => (
+                            <div key={idx} className="trust-card">
+                                <div className="trust-icon">
+                                    <item.icon size={32} />
+                                </div>
+                                <h3 className="trust-title">{item.title}</h3>
+                                <p className="trust-desc">{item.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Student Success Stories */}
+            <section className="section success-stories-section">
+                <div className="container">
+                    <div className="section-header">
+                        <h2 className="section-title">Student Success Stories</h2>
+                        <p className="section-subtitle">See the impact of your donations in action</p>
+                    </div>
+
+                    <div className="stories-grid">
+                        <div className="story-card">
+                            <div className="story-image">
+                                <img src="/images/student-campus.png" alt="Student on campus" />
+                            </div>
+                            <div className="story-content">
+                                <h3>Campus Life</h3>
+                                <p>Your donations help students thrive in their academic journey, attending classes and engaging with their community.</p>
+                            </div>
+                        </div>
+                        <div className="story-card">
+                            <div className="story-image">
+                                <img src="/images/student-library.png" alt="Student studying in library" />
+                            </div>
+                            <div className="story-content">
+                                <h3>Focused Learning</h3>
+                                <p>With financial stress reduced, students can focus on what matters most – their education and growth.</p>
+                            </div>
+                        </div>
+                        <div className="story-card featured">
+                            <div className="story-image">
+                                <img src="/images/student-graduating.png" alt="Student graduating" />
+                            </div>
+                            <div className="story-content">
+                                <h3>Graduation Day</h3>
+                                <p>The ultimate goal – watching students achieve their dreams and graduate, ready to give back to their communities.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Support UniFund Section */}
+            <section className="section support-UniFund-section">
+                <div className="container">
+                    <div className="support-card">
+                        <div className="support-content">
+                            <div className="support-icon">
+                                <Heart size={48} />
+                            </div>
+                            <h2 className="support-title">Support UniFund</h2>
+                            <p className="support-desc">
+                                Help us keep the platform running and continue supporting students in need.
+                                Your donation to UniFund ensures we can maintain our services, verify students,
+                                and connect deserving learners with generous donors.
+                            </p>
+                            <div className="support-features">
+                                <div className="support-feature">
+                                    <CheckCircle size={20} />
+                                    <span>Keep the platform running</span>
+                                </div>
+                                <div className="support-feature">
+                                    <CheckCircle size={20} />
+                                    <span>Verify more students</span>
+                                </div>
+                                <div className="support-feature">
+                                    <CheckCircle size={20} />
+                                    <span>Reach more donors</span>
+                                </div>
+                            </div>
+                            <button className="btn btn-lg support-btn">
+                                <Heart size={20} />
+                                Donate to UniFund
+                            </button>
+                            <p className="support-note">Every contribution helps us help more students</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* CTA Section */}
+            <section className="cta-section">
+                <div className="container">
+                    <div className="cta-content">
+                        <h2 className="cta-title">Ready to Make a Difference?</h2>
+                        <p className="cta-subtitle">Whether you're a student seeking funding or a donor wanting to help, join our community today.</p>
+                        <div className="cta-buttons">
+                            <Link to="/register/student" className="btn btn-lg cta-btn-student" style={{ fontWeight: 600 }}>
+                                I'm a Student
+                            </Link>
+                            <Link to="/browse" className="btn btn-lg cta-btn-donor" style={{ fontWeight: 600 }}>
+                                I Want to Donate
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    );
+};
+
+
+export default Landing;

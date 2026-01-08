@@ -1,0 +1,1886 @@
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+    Home,
+    PlusCircle,
+    BarChart3,
+    Settings,
+    LogOut,
+    Users,
+    DollarSign,
+    TrendingUp,
+    Clock,
+    Bell,
+    Edit,
+    Eye,
+    Share2,
+    CheckCircle,
+    AlertCircle,
+    GraduationCap,
+    User as UserIcon,
+    Upload,
+    Link as LinkIcon,
+    Facebook,
+    Twitter,
+    MessageSquare,
+    Trash2,
+    Plus,
+    X,
+    XCircle,
+    FileText
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import NotificationsDropdown from '../components/NotificationsDropdown';
+import LoadingScreen from '../components/LoadingScreen';
+import { supabase } from '../lib/supabase';
+import type { Campaign, University } from '../types';
+import { CAMPAIGN_CATEGORIES } from '../data/constants';
+import './Dashboard.css';
+import './Modal.css';
+
+const StudentDashboard: React.FC = () => {
+    const { user, isLoading: authLoading, logout, notifications } = useAuth();
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<string>('overview');
+    const [showNotifications, setShowNotifications] = useState(false);
+
+    // Data state
+    const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [university, setUniversity] = useState<University | null>(null);
+    const [recentDonations, setRecentDonations] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [settingsPhone, setSettingsPhone] = useState('');
+    const [showExtendModal, setShowExtendModal] = useState(false);
+    const [extensionDays, setExtensionDays] = useState(30);
+    const [isExtending, setIsExtending] = useState(false);
+
+    const handleExtendCampaign = async () => {
+        if (!campaign || !user) return;
+        setIsExtending(true);
+        try {
+            const currentEndDate = new Date(campaign.endDate);
+            const now = new Date();
+
+            // If campaign is expired, extend from today. Otherwise extend from current end date.
+            const baseDate = currentEndDate < now ? now : currentEndDate;
+
+            const newEndDate = new Date(baseDate);
+            newEndDate.setDate(newEndDate.getDate() + parseInt(extensionDays.toString()));
+
+            const { error } = await supabase
+                .from('campaigns')
+                .update({
+                    end_date: newEndDate.toISOString(),
+                    status: 'active' // Ensure status is active if it was expired
+                })
+                .eq('id', campaign.id);
+
+            if (error) throw error;
+
+            alert("Campaign extended successfully!");
+            setShowExtendModal(false);
+
+            // Update local state to reflect change immediately
+            const latestNow = new Date();
+            const diffTime = Math.abs(newEndDate.getTime() - latestNow.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            setCampaign({
+                ...campaign,
+                endDate: newEndDate.toISOString(),
+                daysLeft: diffDays
+            });
+
+        } catch (error) {
+            console.error("Error extending campaign:", error);
+            alert("Failed to extend campaign.");
+        } finally {
+            setIsExtending(false);
+        }
+    };
+
+    const handleDeleteCampaign = async () => {
+        if (!campaign || !user) return;
+        if (!window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) return;
+
+        try {
+            const { error: deleteError } = await supabase
+                .from('campaigns')
+                .delete()
+                .eq('id', campaign.id);
+
+            if (deleteError) throw deleteError;
+
+            // Update student status to pending
+            const { error: updateError } = await supabase
+                .from('students')
+                .update({ verification_status: 'pending' })
+                .eq('id', user.id);
+
+            if (updateError) {
+                console.warn("Could not reset student verification status:", updateError);
+                // Continue, as campaign is deleted
+            }
+
+            alert("Campaign deleted successfully.");
+            setCampaign(null);
+            setActiveTab('overview');
+            // setStep is not defined here as it is part of the create flow.
+            // Resetting campaign to null will trigger the "Create Campaign" view in overview or creation tab.
+        } catch (error) {
+            console.error("Error deleting campaign:", error);
+            alert("Failed to delete campaign.");
+        }
+    };
+
+    useEffect(() => {
+        if (user?.student?.phone) {
+            setSettingsPhone(user.student.phone);
+        }
+    }, [user?.student?.phone]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            if (authLoading) return;
+
+            if (!user) {
+                navigate('/login');
+                return;
+            }
+
+            // Redirect based on role
+            if (user.role === 'admin') {
+                navigate('/admin');
+                return;
+            }
+            if (user.role === 'donor') {
+                navigate('/browse');
+                return;
+            }
+
+            // If profile is incomplete, redirect to complete-profile
+            if (user.role === 'student' && !user.student?.universityId) {
+                navigate('/complete-profile');
+                return;
+            }
+
+            if (!user.student) {
+                // Should not happen for role='student' due to auth logic, but good safety
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // ... rest of the code remains same
+
+                // 1. Fetch University
+                if (user.student.universityId) {
+                    const { data: uniData } = await supabase
+                        .from('universities')
+                        .select('*')
+                        .eq('id', user.student.universityId)
+                        .single();
+
+                    if (uniData) {
+                        setUniversity({
+                            id: uniData.id,
+                            name: uniData.name,
+                            bankName: uniData.bank_name,
+                            accountNumber: uniData.account_number,
+                            branchCode: uniData.branch_code,
+                            accountName: uniData.account_name,
+                            physicalAddress: uniData.physical_address,
+                            postalAddress: uniData.postal_address,
+                            website: uniData.website,
+                            email: uniData.email,
+                            phone: uniData.phone,
+                            contactPerson: uniData.contact_person,
+                            viceChancellor: uniData.vice_chancellor
+                        });
+                    }
+                }
+
+                // 2. Fetch Campaign
+                const { data: campaignData } = await supabase
+                    .from('campaigns')
+                    .select(`*, funding_items(*)`)
+                    .eq('student_id', user.id)
+                    .maybeSingle();
+
+                if (campaignData) {
+                    // Calculate days left
+                    const end = new Date(campaignData.end_date);
+                    const now = new Date();
+                    const diffTime = Math.abs(end.getTime() - now.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const daysLeft = end < now ? 0 : diffDays;
+
+                    // Fetch donors count (distinct donors)
+                    // Simplified: just select count of donations
+                    const { count } = await supabase
+                        .from('donations')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('campaign_id', campaignData.id);
+
+                    setCampaign({
+                        id: campaignData.id,
+                        studentId: campaignData.student_id,
+                        title: campaignData.title,
+                        story: campaignData.story,
+                        goal: campaignData.goal_amount || 0,
+                        raised: campaignData.raised_amount || 0,
+                        donors: count || 0,
+                        daysLeft: daysLeft,
+                        startDate: campaignData.start_date,
+                        endDate: campaignData.end_date,
+                        status: campaignData.status,
+                        type: campaignData.type || (campaignData.is_urgent ? 'quick_assist' : 'standard'),
+                        category: campaignData.category,
+                        isUrgent: campaignData.is_urgent,
+                        fundingBreakdown: campaignData.funding_items?.map((fi: any) => ({
+                            id: fi.id,
+                            name: fi.name,
+                            amount: fi.amount,
+                            description: fi.description
+                        })) || [],
+                        invoiceUrl: campaignData.invoice_url,
+                        createdAt: campaignData.created_at,
+                        updatedAt: campaignData.updated_at
+                    });
+
+                    // 3. Fetch Donations
+                    const { data: donations } = await supabase
+                        .from('donations')
+                        .select(`
+                            *,
+                            donors (
+                                first_name,
+                                last_name
+                            )
+                        `)
+                        .eq('campaign_id', campaignData.id)
+                        .order('created_at', { ascending: false })
+                        .limit(5);
+
+                    if (donations) {
+                        setRecentDonations(donations.map(d => ({
+                            id: d.id,
+                            name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name} ${d.donors?.last_name}`,
+                            amount: d.amount,
+                            date: new Date(d.created_at).toLocaleDateString(),
+                            anonymous: d.is_anonymous
+                        })));
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error fetching dashboard data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+
+        // Subscribe to real-time updates for campaign and donations
+        let campaignSubscription: any;
+        let donationsSubscription: any;
+
+        if (user?.id) {
+            campaignSubscription = supabase
+                .channel('student-campaign-updates')
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'campaigns',
+                    filter: `student_id=eq.${user.id}`
+                }, () => {
+                    fetchData(); // Simplest to just refetch
+                })
+                .subscribe();
+
+            donationsSubscription = supabase
+                .channel('student-donations-updates')
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'donations'
+                    // We can't easily filter by campaign_id in the channel filter without knowing it beforehand,
+                    // but we can refetch when any donation change occurs.
+                }, (payload: any) => {
+                    // Only refetch if the donation belongs to our campaign
+                    if (campaign && (payload.new?.campaign_id === campaign.id || payload.old?.campaign_id === campaign.id)) {
+                        fetchData();
+                    } else if (!campaign) {
+                        fetchData(); // If no campaign yet, maybe one was just added or we need to check
+                    }
+                })
+                .subscribe();
+        }
+
+        return () => {
+            if (campaignSubscription) supabase.removeChannel(campaignSubscription);
+            if (donationsSubscription) supabase.removeChannel(donationsSubscription);
+        };
+    }, [user, authLoading]);
+
+    const handleLogout = () => {
+        logout();
+        navigate('/');
+    };
+
+    const percentFunded = campaign && campaign.goal > 0 ? Math.min((campaign.raised / campaign.goal) * 100, 100) : 0;
+
+    if (authLoading || loading) {
+        return <LoadingScreen title="Loading Dashboard" message="Please wait while we fetch your data..." />;
+    }
+
+    return (
+        <div className="dashboard-page">
+            {/* Sidebar */}
+            <aside className="dashboard-sidebar">
+                <div className="sidebar-header">
+                    <Link to="/">
+                        <img src="/images/logo.png" alt="UniFund" className="sidebar-brand-image" />
+                    </Link>
+                </div>
+
+                <div className="px-6 mb-4">
+                    <Link to="/" className="flex items-center gap-2 text-primary-600 hover:text-primary-700 transition-colors text-sm font-medium p-2 rounded-md hover:bg-primary-50">
+                        <Home size={16} />
+                        Back to Website
+                    </Link>
+                </div>
+
+                <div className="sidebar-user-profile">
+                    <div className="sidebar-avatar">
+                        {user?.student?.profileImage ? (
+                            <img
+                                src={user.student.profileImage}
+                                alt="Profile"
+                                className="sidebar-avatar-img"
+                            />
+                        ) : (
+                            <div className="sidebar-avatar-placeholder">
+                                {user?.student?.firstName?.[0]}{user?.student?.lastName?.[0]}
+                            </div>
+                        )}
+                    </div>
+                    <div className="sidebar-user-info">
+                        <span className="sidebar-user-name">{user?.student?.firstName} {user?.student?.lastName}</span>
+                        <span className="sidebar-user-role">Student</span>
+                    </div>
+                </div>
+
+                <nav className="sidebar-nav">
+                    <button
+                        className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('overview')}
+                    >
+                        <Home size={20} />
+                        Overview
+                    </button>
+                    <button
+                        className={`nav-item ${activeTab === 'campaign' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('campaign')}
+                    >
+                        <BarChart3 size={20} />
+                        My Campaign
+                    </button>
+                    <button
+                        className={`nav-item ${activeTab === 'create' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('create')}
+                    >
+                        <PlusCircle size={20} />
+                        Create Campaign
+                    </button>
+                    <button
+                        className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('settings')}
+                    >
+                        <Settings size={20} />
+                        Settings
+                    </button>
+                </nav>
+
+                <div className="sidebar-footer">
+                    <button className="logout-btn" onClick={handleLogout}>
+                        <LogOut size={20} />
+                        Logout
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <main className="dashboard-main">
+                {/* Header */}
+                <header className="dashboard-header">
+                    <div className="header-left">
+                        <h1 className="page-title">
+                            {activeTab === 'overview' && 'Dashboard Overview'}
+                            {activeTab === 'campaign' && 'My Campaign'}
+                            {activeTab === 'create' && 'Create Campaign'}
+                            {activeTab === 'settings' && 'Account Settings'}
+                        </h1>
+                        <p className="page-subtitle">Welcome back, {user?.student?.firstName || 'Student'}!</p>
+                    </div>
+                    <div className="header-right">
+                        <div className="notification-wrapper" style={{ position: 'relative' }}>
+                            <button
+                                className="notification-btn"
+                                onClick={() => setShowNotifications(!showNotifications)}
+                            >
+                                <Bell size={20} />
+                                {notifications.filter(n => !n.read).length > 0 && (
+                                    <span className="notification-dot" />
+                                )}
+                            </button>
+
+                            {showNotifications && (
+                                <NotificationsDropdown onClose={() => setShowNotifications(false)} />
+                            )}
+                        </div>
+                    </div>
+                    {/* User badge moved to sidebar */}
+                </header>
+
+                {/* Content */}
+                < div className="dashboard-content" >
+                    {/* Overview Tab */}
+                    {
+                        activeTab === 'overview' && (
+                            <>
+                                {/* Verification Status */}
+                                {user?.student?.verificationStatus === 'pending' && (
+                                    <div className="alert alert-info">
+                                        <Clock size={24} />
+                                        <div>
+                                            <h4>Verification Pending</h4>
+                                            <p>Your documents are being reviewed. You'll be able to create a campaign once verified.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {user?.student?.verificationStatus === 'approved' && (
+                                    <div className="alert alert-success">
+                                        <CheckCircle size={24} />
+                                        <div>
+                                            <h4>Account Verified</h4>
+                                            <p>Your student status has been verified. You can now create and manage your campaign.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!campaign ? (
+                                    <div className="card empty-campaign-card">
+                                        <div className="empty-campaign-content">
+                                            <div className="empty-campaign-icon">
+                                                <FileText size={48} strokeWidth={1.5} />
+                                            </div>
+                                            <h3 className="empty-campaign-title">No Active Campaign</h3>
+                                            <p className="empty-campaign-description">
+                                                Create a fundraising campaign to start receiving support for your education.
+                                                Your campaign will be reviewed by our team before going live.
+                                            </p>
+                                            <button
+                                                className="btn btn-primary btn-lg"
+                                                onClick={() => setActiveTab('create')}
+                                            >
+                                                <PlusCircle size={20} />
+                                                Create New Campaign
+                                            </button>
+                                            <p className="empty-campaign-note">
+                                                <Clock size={14} />
+                                                Campaign approval typically takes 24-48 hours
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Pending Campaign Status */}
+                                        {campaign.status === 'pending' && (
+                                            <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
+                                                <Clock size={24} />
+                                                <div>
+                                                    <h4>Campaign Pending Approval</h4>
+                                                    <p>Your campaign is being reviewed by our team. It will go live once approved. This typically takes 24-48 hours.</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Rejected Campaign Status */}
+                                        {campaign.status === 'rejected' && (
+                                            <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-6)' }}>
+                                                <XCircle size={24} />
+                                                <div>
+                                                    <h4>Campaign Not Approved</h4>
+                                                    <p>Unfortunately, your campaign was not approved. Please review the feedback and try creating a new campaign.</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Stats Cards */}
+                                        <div className="stats-grid">
+                                            <div
+                                                className="stat-card primary"
+                                                onClick={() => setActiveTab('campaign')}
+                                                style={{ cursor: 'pointer' }}
+                                                title="View Campaign Details"
+                                            >
+                                                <div className="stat-icon">
+                                                    <DollarSign size={24} />
+                                                </div>
+                                                <div className="stat-info">
+                                                    <span className="stat-value">R{campaign.raised.toLocaleString()}</span>
+                                                    <span className="stat-label">Total Raised</span>
+                                                </div>
+                                            </div>
+
+                                            <div
+                                                className="stat-card success"
+                                                onClick={() => setActiveTab('campaign')}
+                                                style={{ cursor: 'pointer' }}
+                                                title="View Campaign Details"
+                                            >
+                                                <div className="stat-icon">
+                                                    <Users size={24} />
+                                                </div>
+                                                <div className="stat-info">
+                                                    <span className="stat-value">{campaign.donors}</span>
+                                                    <span className="stat-label">Total Donors</span>
+                                                </div>
+                                            </div>
+
+                                            <div
+                                                className="stat-card warning"
+                                                onClick={() => setActiveTab('campaign')}
+                                                style={{ cursor: 'pointer' }}
+                                                title="View Campaign Details"
+                                            >
+                                                <div className="stat-icon">
+                                                    <TrendingUp size={24} />
+                                                </div>
+                                                <div className="stat-info">
+                                                    <span className="stat-value">{Math.round(percentFunded)}%</span>
+                                                    <span className="stat-label">Goal Progress</span>
+                                                </div>
+                                            </div>
+
+                                            <div
+                                                className="stat-card info"
+                                                onClick={() => setShowExtendModal(true)}
+                                                style={{ cursor: 'pointer' }}
+                                                title="Click to extend campaign duration"
+                                            >
+                                                <div className="stat-icon">
+                                                    <Clock size={24} />
+                                                </div>
+                                                <div className="stat-info">
+                                                    <span className="stat-value">{campaign.daysLeft}</span>
+                                                    <span className="stat-label">Days Left (Extend)</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Campaign Progress */}
+                                        <div className="card">
+                                            <div className="card-header">
+                                                <h2 className="card-title">Campaign Progress</h2>
+                                                <Link to={`/campaign/${campaign.id}`} className="card-link">
+                                                    <Eye size={18} /> View Campaign
+                                                </Link>
+                                            </div>
+                                            <div className="card-body">
+                                                <div className="progress-section">
+                                                    <div className="progress-header">
+                                                        <span className="progress-raised">R{campaign.raised.toLocaleString()}</span>
+                                                        <span className="progress-goal">of R{campaign.goal.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="progress-bar large">
+                                                        <div
+                                                            className="progress-bar-fill"
+                                                            style={{ width: `${percentFunded}%` }}
+                                                        />
+                                                    </div>
+                                                    <p className="progress-remaining">
+                                                        R{(campaign.goal - campaign.raised).toLocaleString()} still needed to reach your goal
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Share Campaign */}
+                                        <div className="card">
+                                            <div className="card-header">
+                                                <h2 className="card-title">Share Your Campaign</h2>
+                                            </div>
+                                            <div className="card-body">
+                                                <p className="mb-4 text-gray-600">
+                                                    Share your campaign link with friends, family, and on social media to reach more potential donors.
+                                                </p>
+                                                <div className="share-link-group" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                    <div className="amount-input-wrapper" style={{ flex: 1, marginBottom: 0, minWidth: '200px' }}>
+                                                        <LinkIcon size={18} className="currency-prefix" style={{ color: '#64748b' }} />
+                                                        <input
+                                                            type="text"
+                                                            readOnly
+                                                            className="form-input"
+                                                            style={{ paddingLeft: '40px' }}
+                                                            value={`${window.location.origin}/campaign/${campaign.id}`}
+                                                            onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-primary"
+                                                        onClick={() => {
+                                                            const url = `${window.location.origin}/campaign/${campaign.id}`;
+                                                            navigator.clipboard.writeText(url);
+                                                            alert("Campaign link copied to clipboard!");
+                                                        }}
+                                                    >
+                                                        <Share2 size={18} />
+                                                        <span>Copy Link</span>
+                                                    </button>
+                                                </div>
+
+                                                <div className="share-social-links" style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                                                    <a
+                                                        href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn btn-secondary"
+                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                        title="Share on Facebook"
+                                                    >
+                                                        <Facebook size={20} style={{ color: '#1877F2' }} />
+                                                    </a>
+                                                    <a
+                                                        href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}&text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title}`)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn btn-secondary"
+                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                        title="Share on Twitter"
+                                                    >
+                                                        <Twitter size={20} style={{ color: '#1DA1F2' }} />
+                                                    </a>
+                                                    <a
+                                                        href={`https://wa.me/?text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title} ${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn btn-secondary"
+                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                        title="Share on WhatsApp"
+                                                    >
+                                                        <MessageSquare size={20} style={{ color: '#25D366' }} />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Recent Donations */}
+                                        <div className="card">
+                                            <div className="card-header">
+                                                <h2 className="card-title">Recent Donations</h2>
+                                            </div>
+                                            <div className="donations-list">
+                                                {recentDonations.length > 0 ? recentDonations.map((donation) => (
+                                                    <div key={donation.id} className="donation-item">
+                                                        <div className="donor-avatar">
+                                                            {donation.anonymous ? '?' : donation.name[0]}
+                                                        </div>
+                                                        <div className="donor-info">
+                                                            <span className="donor-name">{donation.name}</span>
+                                                            <span className="donation-date">{donation.date}</span>
+                                                        </div>
+                                                        <span className="donation-amount">+R{donation.amount.toLocaleString()}</span>
+                                                    </div>
+                                                )) : (
+                                                    <p className="text-gray-500 text-center py-4">No donations yet.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )
+                    }
+
+                    {
+                        activeTab === 'overview' && campaign && (
+                            <div className="card mt-8 border-l-4 border-red-500 bg-white">
+                                <div className="p-6">
+                                    <h3 className="text-lg font-bold text-red-700 mb-2">Danger Zone</h3>
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        Deleting your campaign is irreversible. All data, including funding breakdown and comments, will be lost.
+                                        This action cannot be undone.
+                                    </p>
+                                    <button
+                                        onClick={handleDeleteCampaign}
+                                        className="btn bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+                                    >
+                                        <Trash2 size={16} className="mr-2" />
+                                        Delete Campaign
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    }
+
+                    {/* Campaign Tab */}
+                    {
+                        activeTab === 'campaign' && (
+                            campaign && university ? (
+                                <>
+                                    <div className="card">
+                                        <div className="card-header">
+                                            <h2 className="card-title">Campaign Details</h2>
+                                            <div className="card-actions">
+                                                <button
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => setActiveTab('edit')}
+                                                >
+                                                    <Edit size={16} /> Edit
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/campaign/${campaign.id}`;
+                                                        navigator.clipboard.writeText(url);
+                                                        alert("Campaign link copied to clipboard!");
+                                                    }}
+                                                >
+                                                    <Share2 size={16} /> Share
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary btn-sm text-red-600 hover:text-white hover:bg-red-600 border-red-200"
+                                                    onClick={handleDeleteCampaign}
+                                                >
+                                                    <Trash2 size={16} /> Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="card-body">
+                                            <div className="campaign-overview">
+                                                <div className="campaign-avatar-large">
+                                                    {campaign.images?.[0] ? (
+                                                        <img src={campaign.images[0]} alt={campaign.title} className="campaign-preview-img" />
+                                                    ) : (
+                                                        <UserIcon size={48} strokeWidth={1.5} />
+                                                    )}
+                                                </div>
+                                                <div className="campaign-details">
+                                                    <h3 className="campaign-title-large">{campaign.title}</h3>
+                                                    <p className="campaign-course-detail">{user?.student?.course}</p>
+                                                    <p className="campaign-university-detail">{university.name}</p>
+                                                    <div className="campaign-status">
+                                                        <span className="status-badge active">Active</span>
+                                                        {user?.student?.verificationStatus === 'approved' && (
+                                                            <span className="status-badge verified">
+                                                                <CheckCircle size={14} /> Verified
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="campaign-story-section">
+                                                <h4>Your Story</h4>
+                                                <p>{campaign.story}</p>
+                                            </div>
+
+                                            <div className="funding-breakdown-section">
+                                                <h4>Funding Breakdown</h4>
+                                                <div className="breakdown-grid">
+                                                    {campaign.fundingBreakdown.map((item) => (
+                                                        <div key={item.id} className="breakdown-card">
+                                                            <span className="breakdown-name">{item.name}</span>
+                                                            <span className="breakdown-amount">R{item.amount.toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Payment Info */}
+                                    <div className="card">
+                                        <div className="card-header">
+                                            <h2 className="card-title">Payment Information</h2>
+                                        </div>
+                                        <div className="card-body">
+                                            <div className="payment-info">
+                                                <p className="payment-note">
+                                                    All donations are paid directly to your university account using your student number as reference.
+                                                </p>
+                                                <div className="payment-details">
+                                                    <div className="payment-row">
+                                                        <span>University:</span>
+                                                        <span>{university.name}</span>
+                                                    </div>
+                                                    <div className="payment-row">
+                                                        <span>Bank:</span>
+                                                        <span>{university.bankName}</span>
+                                                    </div>
+                                                    <div className="payment-row">
+                                                        <span>Account:</span>
+                                                        <span>{university.accountName}</span>
+                                                    </div>
+                                                    <div className="payment-row highlight">
+                                                        <span>Reference:</span>
+                                                        <span>{user?.student?.studentNumber || 'Loading...'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-center py-12 card">
+                                    <h3 className="text-lg font-semibold mb-2">No Campaign Found</h3>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => setActiveTab('create')}
+                                    >
+                                        <PlusCircle size={18} className="mr-2" />
+                                        Create Campaign
+                                    </button>
+                                </div>
+                            )
+                        )
+                    }
+
+                    {/* Create Campaign Tab */}
+                    {
+                        activeTab === 'create' && (
+                            user?.student?.verificationStatus === 'approved' ? (
+                                university ?
+                                    <CampaignForm
+                                        university={university}
+                                        user={user}
+                                        onSuccess={() => {
+                                            setActiveTab('campaign');
+                                            window.location.reload();
+                                        }}
+                                        onCancel={() => setActiveTab('overview')}
+                                    /> : <div>Loading university info...</div>
+                            ) : (
+                                <div className="card text-center py-12">
+                                    <AlertCircle size={48} className="mx-auto mb-4 text-warning" />
+                                    <h3 className="text-lg font-semibold mb-2">Verification Required</h3>
+                                    <p className="text-gray-500 mb-6">
+                                        Your account must be verified by an administrator before you can create a campaign.
+                                        Check your verification status on the overview tab.
+                                    </p>
+                                    <button className="btn btn-secondary" onClick={() => setActiveTab('overview')}>
+                                        Back to Overview
+                                    </button>
+                                </div>
+                            )
+                        )
+                    }
+
+                    {/* Edit Campaign Tab */}
+                    {
+                        activeTab === 'edit' && campaign && university && (
+                            <CampaignForm
+                                university={university}
+                                user={user}
+                                initialData={campaign}
+                                isEditing={true}
+                                onSuccess={() => {
+                                    setActiveTab('campaign');
+                                    window.location.reload();
+                                }}
+                                onCancel={() => setActiveTab('campaign')}
+                            />
+                        )
+                    }
+
+                    {/* Settings Tab */}
+                    {
+                        activeTab === 'settings' && user && (
+                            <div className="card">
+                                <div className="card-header">
+                                    <h2 className="card-title">Account Settings</h2>
+                                </div>
+                                <div className="card-body">
+                                    <div className="settings-section">
+                                        <h4>Profile Information</h4>
+                                        <div className="settings-form">
+                                            <div className="form-row">
+                                                <div className="form-group">
+                                                    <label className="form-label">First Name</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={user.student?.firstName || ''}
+                                                        readOnly
+                                                        disabled
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label className="form-label">Last Name</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={user.student?.lastName || ''}
+                                                        readOnly
+                                                        disabled
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Email</label>
+                                                <input
+                                                    type="email"
+                                                    className="form-input"
+                                                    value={user.email || ''}
+                                                    readOnly
+                                                    disabled
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    className="form-input"
+                                                    value={settingsPhone}
+                                                    onChange={(e) => setSettingsPhone(e.target.value)}
+                                                />
+                                            </div>
+                                            <button
+                                                className="btn btn-primary mt-4"
+                                                disabled={savingSettings || settingsPhone === user.student?.phone}
+                                                onClick={async () => {
+                                                    setSavingSettings(true);
+                                                    try {
+                                                        const { error } = await supabase
+                                                            .from('students')
+                                                            .update({ phone: settingsPhone })
+                                                            .eq('id', user.id);
+                                                        if (error) throw error;
+                                                        alert("Settings saved!");
+                                                        window.location.reload();
+                                                    } catch (err: any) {
+                                                        alert("Failed to save: " + err.message);
+                                                    } finally {
+                                                        setSavingSettings(false);
+                                                    }
+                                                }}
+                                            >
+                                                {savingSettings ? 'Saving...' : 'Save Changes'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-section">
+                                        <h4>University Information</h4>
+                                        <div className="settings-form">
+                                            <div className="form-group">
+                                                <label className="form-label">University</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    value={university?.name || ''}
+                                                    readOnly
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Student Number</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    value={user.student?.studentNumber || ''}
+                                                    readOnly
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Course</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    value={user.student?.course || ''}
+                                                    readOnly
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    }
+                </div>
+            </main >
+
+            {showExtendModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h3 className="modal-title">Extend Campaign</h3>
+                            <button onClick={() => setShowExtendModal(false)} className="modal-close-btn">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p className="mb-4 text-gray-600">
+                                Extend your campaign duration to reach more donors.
+                            </p>
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="extension-days">Extend by</label>
+                                <select
+                                    id="extension-days"
+                                    name="extensionDays"
+                                    className="form-input"
+                                    value={extensionDays}
+                                    onChange={(e) => setExtensionDays(parseInt(e.target.value))}
+                                >
+                                    <option value={15}>15 Days</option>
+                                    <option value={30}>30 Days</option>
+                                    <option value={60}>60 Days</option>
+                                    <option value={90}>90 Days</option>
+                                </select>
+                            </div>
+
+                            <div className="info-box mt-4">
+                                <Clock size={20} />
+                                <div>
+                                    <h4>New End Date</h4>
+                                    <p>
+                                        {(() => {
+                                            const currentEndDate = new Date(campaign?.endDate || new Date());
+                                            const now = new Date();
+                                            const baseDate = currentEndDate < now ? now : currentEndDate;
+
+                                            const d = new Date(baseDate);
+                                            d.setDate(d.getDate() + extensionDays);
+                                            return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                                        })()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowExtendModal(false)}
+                                disabled={isExtending}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleExtendCampaign}
+                                disabled={isExtending}
+                            >
+                                {isExtending ? 'Extending...' : 'Confirm Extension'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div >
+    );
+};
+
+interface CampaignFormProps {
+    university: University;
+    user: any;
+    onSuccess: () => void;
+    onCancel?: () => void;
+    initialData?: Campaign | null;
+    isEditing?: boolean;
+}
+
+const CampaignForm: React.FC<CampaignFormProps> = ({
+    university,
+    user,
+    onSuccess,
+    onCancel,
+    initialData,
+    isEditing = false
+}) => {
+    const [step, setStep] = useState(0); // Always start at 0 to allow type selection check
+    const [campaignType, setCampaignType] = useState<'standard' | 'quick_assist'>(
+        initialData?.type || (initialData?.isUrgent ? 'quick_assist' : 'standard')
+    );
+    const [submitting, setSubmitting] = useState(false);
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(initialData?.images?.[0] || null);
+
+    const [formData, setFormData] = useState({
+        title: initialData?.title || '',
+        story: initialData?.story || '',
+        category: initialData?.category || 'tuition',
+        goal: initialData?.goal?.toString() || '',
+        endDate: initialData?.endDate ? new Date(initialData.endDate).toISOString().split('T')[0] : '',
+        invoice: null as File | null,
+        feeStatement: null as File | null,
+        idDocument: null as File | null,
+        enrollmentDocument: null as File | null,
+        fundingBreakdown: initialData?.fundingBreakdown || [
+            { id: '1', name: 'Tuition Fees', amount: 0 },
+            { id: '2', name: 'Accommodation', amount: 0 },
+            { id: '3', name: 'Textbooks & Materials', amount: 0 },
+            { id: '4', name: 'Other Expenses', amount: 0 },
+        ],
+    });
+
+    const hasDonations = (initialData?.raised || 0) > 0;
+
+    const updateFormData = (field: string, value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const updateBreakdownAmount = (id: string, amount: number) => {
+        setFormData(prev => ({
+            ...prev,
+            fundingBreakdown: prev.fundingBreakdown.map(item =>
+                item.id === id ? { ...item, amount } : item
+            )
+        }));
+    };
+
+    const updateBreakdownName = (id: string, name: string) => {
+        setFormData(prev => ({
+            ...prev,
+            fundingBreakdown: prev.fundingBreakdown.map(item =>
+                item.id === id ? { ...item, name } : item
+            )
+        }));
+    };
+
+    const addBreakdownItem = () => {
+        setFormData(prev => ({
+            ...prev,
+            fundingBreakdown: [
+                ...prev.fundingBreakdown,
+                { id: Date.now().toString(), name: '', amount: 0 }
+            ]
+        }));
+    };
+
+    const removeBreakdownItem = (id: string) => {
+        setFormData(prev => ({
+            ...prev,
+            fundingBreakdown: prev.fundingBreakdown.filter(item => item.id !== id)
+        }));
+    };
+
+    const totalBreakdown = formData.fundingBreakdown.reduce((sum, item) => sum + item.amount, 0);
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setImageFile(file);
+            const url = URL.createObjectURL(file);
+            setPreviewUrl(url);
+        }
+    };
+
+    const handleSubmit = async () => {
+        setSubmitting(true);
+        try {
+            // 1. Upload Documents
+            let feeStatementUrl = initialData?.feeStatementUrl || null;
+            let idUrl = initialData?.idUrl || null;
+            let enrollmentUrl = initialData?.enrollmentUrl || null;
+
+            if (formData.feeStatement) {
+                const fileExt = formData.feeStatement.name.split('.').pop();
+                const fileName = `campaigns/${user.id}/fee_statement_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(fileName, formData.feeStatement);
+                if (uploadError) throw uploadError;
+                const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
+                feeStatementUrl = publicUrl;
+            }
+
+            if (formData.idDocument) {
+                const fileExt = formData.idDocument.name.split('.').pop();
+                const fileName = `campaigns/${user.id}/id_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(fileName, formData.idDocument);
+                if (uploadError) throw uploadError;
+                const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
+                idUrl = publicUrl;
+            }
+
+            if (formData.enrollmentDocument) {
+                const fileExt = formData.enrollmentDocument.name.split('.').pop();
+                const fileName = `campaigns/${user.id}/enrollment_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(fileName, formData.enrollmentDocument);
+                if (uploadError) throw uploadError;
+                const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
+                enrollmentUrl = publicUrl;
+            }
+
+            let invoiceUrl = initialData?.invoiceUrl || null;
+            if (formData.invoice) {
+                const fileExt = formData.invoice.name.split('.').pop();
+                const fileName = `invoices/${user.id}/${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(fileName, formData.invoice);
+                if (uploadError) throw uploadError;
+                const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
+                invoiceUrl = publicUrl;
+            }
+            let images = initialData?.images || [];
+            if (imageFile) {
+                const fileExt = imageFile.name.split('.').pop();
+                const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+                const { error: imgError, data: imgData } = await supabase.storage
+                    .from('campaign-images')
+                    .upload(fileName, imageFile);
+
+                if (imgError) throw imgError;
+
+                // Get public URL for display
+                const { data: { publicUrl } } = supabase.storage
+                    .from('campaign-images')
+                    .getPublicUrl(imgData.path);
+
+                images = [publicUrl]; // For now single image
+            } else if (images.length === 0 && user?.student?.profileImage) {
+                // If no image uploaded and no existing images, use profile image
+                images = [user.student.profileImage];
+            }
+
+            // Filter out any potential null/undefined values
+            images = images.filter(Boolean);
+
+            // 3. Upsert Campaign
+            const campaignPayload = {
+                student_id: user.id,
+                title: formData.title,
+                story: formData.story,
+                goal_amount: parseFloat(formData.goal),
+                category: formData.category,
+                is_urgent: campaignType === 'quick_assist',
+                type: campaignType,
+                end_date: formData.endDate,
+                invoice_url: invoiceUrl,
+                fee_statement_url: feeStatementUrl,
+                id_url: idUrl,
+                enrollment_url: enrollmentUrl,
+                images: images,
+                // New campaigns start as 'pending' and require admin approval
+                status: isEditing ? (initialData?.status || 'pending') : 'pending',
+                updated_at: new Date().toISOString()
+            };
+
+
+            let campaignId = initialData?.id;
+
+            if (isEditing && campaignId) {
+                const { error: updateError } = await supabase
+                    .from('campaigns')
+                    .update(campaignPayload)
+                    .eq('id', campaignId);
+
+                if (updateError) throw updateError;
+
+                // Delete old funding items and re-insert (simplest for now)
+                await supabase.from('funding_items').delete().eq('campaign_id', campaignId);
+            } else {
+                const { data: newCampaign, error: insertError } = await supabase
+                    .from('campaigns')
+                    .insert({ ...campaignPayload, start_date: new Date().toISOString() })
+                    .select()
+                    .single();
+
+                if (insertError) throw insertError;
+                campaignId = newCampaign.id;
+            }
+
+            // 4. Insert Funding Items
+            const items = formData.fundingBreakdown
+                .filter(item => item.amount > 0)
+                .map(item => ({
+                    campaign_id: campaignId,
+                    name: item.name,
+                    amount: item.amount
+                }));
+
+            if (items.length > 0) {
+                const { error: itemsError } = await supabase
+                    .from('funding_items')
+                    .insert(items);
+                if (itemsError) throw itemsError;
+            }
+
+            if (isEditing) {
+                alert("Campaign updated successfully!");
+            } else {
+                alert("Campaign submitted successfully! Your campaign is now pending review by our team. You will be notified once it's approved and goes live.");
+            }
+            onSuccess();
+
+
+        } catch (error: any) {
+            console.error("Error processing campaign:", error);
+            alert("Operation failed: " + error.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <>
+            {/* Progress */}
+            <div className="campaign-steps">
+                {step > 0 && (
+                    <>
+                        <div className={`campaign-step ${step >= 1 ? 'active' : ''}`}>
+                            <span className="campaign-step-num">1</span>
+                            <span className="campaign-step-label">Basic Info</span>
+                        </div>
+                        <div className="campaign-step-line" />
+                        <div className={`campaign-step ${step >= 2 ? 'active' : ''}`}>
+                            <span className="campaign-step-num">2</span>
+                            <span className="campaign-step-label">Your Story</span>
+                        </div>
+                        <div className="campaign-step-line" />
+                        <div className={`campaign-step ${step >= 3 ? 'active' : ''}`}>
+                            <span className="campaign-step-num">3</span>
+                            <span className="campaign-step-label">Funding</span>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            <div className="card">
+                <div className="card-body">
+                    {/* Step 0: Campaign Type Selection */}
+                    {step === 0 && (
+                        <div className="campaign-form-step">
+                            <h3>Select Campaign Type</h3>
+                            <p className="form-description">
+                                Choose the type of campaign that best fits your needs.
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                <div
+                                    className={`card p-6 cursor-pointer border-2 transition-all ${campaignType === 'standard' ? 'border-primary-500 bg-primary-50' : 'border-transparent hover:border-gray-200'}`}
+                                    onClick={() => setCampaignType('standard')}
+                                >
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className={`p-3 rounded-full ${campaignType === 'standard' ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
+                                            <GraduationCap size={24} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-semibold">Standard Campaign</h4>
+                                            <p className="text-sm text-gray-500">For tuition, accommodation, and general studies</p>
+                                        </div>
+                                    </div>
+                                    <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5">
+                                        <li>Comprehensive fundraising</li>
+                                        <li>Detailed story and breakdown</li>
+                                        <li>Longer duration (up to 6 months)</li>
+                                    </ul>
+                                </div>
+
+                                <div
+                                    className={`card p-6 cursor-pointer border-2 transition-all ${campaignType === 'quick_assist' ? 'border-primary-500 bg-primary-50' : 'border-transparent hover:border-gray-200'}`}
+                                    onClick={() => setCampaignType('quick_assist')}
+                                >
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className={`p-3 rounded-full ${campaignType === 'quick_assist' ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
+                                            <AlertCircle size={24} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-semibold">Quick Assist</h4>
+                                            <p className="text-sm text-gray-500">Urgent help for smaller expenses</p>
+                                        </div>
+                                    </div>
+                                    <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5">
+                                        <li>Food, Stationary, App Fees</li>
+                                        <li>Simplified creation process</li>
+                                        <li>Urgent priority status</li>
+                                        <li>Paid out as lump sum</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div className="form-actions mt-8">
+                                {onCancel && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-lg"
+                                        onClick={onCancel}
+                                    >
+                                        Cancel
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-lg w-full md:w-auto"
+                                    onClick={() => {
+                                        if (campaignType === 'quick_assist') {
+                                            // Reset breakdown for quick assist to single item
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                category: 'food',
+                                                fundingBreakdown: [{ id: '1', name: 'Assistance', amount: 0 }]
+                                            }));
+                                        }
+                                        setStep(1);
+                                    }}
+                                >
+                                    Confirm Type & Continue
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 1: Basic Info */}
+                    {step === 1 && (
+                        <div className="campaign-form-step">
+                            <h3>{campaignType === 'quick_assist' ? 'Quick Assist Details' : 'Campaign Basic Information'}</h3>
+                            <p className="form-description">
+                                {campaignType === 'quick_assist'
+                                    ? 'Provide details for your urgent request.'
+                                    : 'Tell us about your campaign. This will be the first thing potential donors see.'}
+                            </p>
+
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="campaign-category">Category *</label>
+                                <select
+                                    id="campaign-category"
+                                    name="category"
+                                    className="form-input form-select"
+                                    value={formData.category}
+                                    onChange={(e) => {
+                                        const newCategory = e.target.value as any;
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            category: newCategory,
+                                            // Reset breakdown to single item based on new category for both types
+                                            fundingBreakdown: [{
+                                                id: Date.now().toString(),
+                                                name: CAMPAIGN_CATEGORIES.find(c => c.value === newCategory)?.label || 'Other',
+                                                amount: 0
+                                            }]
+                                        }));
+                                    }}
+                                >
+                                    {CAMPAIGN_CATEGORIES
+                                        .filter(c => campaignType === 'quick_assist'
+                                            ? ['food', 'application_fee', 'registration_fee', 'stationary'].includes(c.value)
+                                            : !['food', 'application_fee', 'registration_fee', 'stationary'].includes(c.value)
+                                        )
+                                        .map(cat => (
+                                            <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                        ))}
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="campaign-title">Campaign Title *</label>
+                                <input
+                                    type="text"
+                                    id="campaign-title"
+                                    name="title"
+                                    className="form-input"
+                                    placeholder={campaignType === 'quick_assist' ? "e.g., Urgent Food Assistance Needed" : "e.g., Help me complete my Computer Science degree"}
+                                    value={formData.title}
+                                    onChange={(e) => updateFormData('title', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="campaign-goal">Funding Goal (ZAR) *</label>
+                                <div className="amount-input-wrapper">
+                                    <span className="currency-prefix">R</span>
+                                    <input
+                                        type="number"
+                                        id="campaign-goal"
+                                        name="goal"
+                                        className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        placeholder={campaignType === 'quick_assist' ? "500" : "45000"}
+                                        value={formData.goal}
+                                        disabled={hasDonations}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            updateFormData('goal', val);
+                                            // Auto-update breakdown for quick assist
+                                            if (campaignType === 'quick_assist') {
+                                                updateBreakdownAmount('1', parseInt(val) || 0);
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                {hasDonations && (
+                                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                        <AlertCircle size={12} />
+                                        Funding goal cannot be changed once donations have been received.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Campaign Image *</label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        id="image-upload"
+                                        onChange={handleImageChange}
+                                    />
+                                    <label htmlFor="image-upload" className="cursor-pointer">
+                                        {previewUrl ? (
+                                            <div className="relative group">
+                                                <img
+                                                    src={previewUrl}
+                                                    alt="Preview"
+                                                    className="max-h-48 mx-auto rounded-lg shadow-sm"
+                                                />
+                                                <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                                                    <Upload size={32} className="text-white" />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Upload size={32} className="text-gray-400" />
+                                                <span className="text-primary-600 font-medium">Click to upload campaign image</span>
+                                                <span className="text-xs text-gray-500">JPG, PNG or WEBP (Max 5MB)</span>
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
+                            </div>
+
+                            {formData.category === 'stationary' && (
+                                <div className="form-group">
+                                    <label className="form-label">Upload Invoice (Required for Stationary, Must be certified) *</label>
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.png"
+                                            className="hidden"
+                                            id="invoice-upload"
+                                            onChange={(e) => setFormData(prev => ({ ...prev, invoice: e.target.files?.[0] || null }))}
+                                        />
+                                        <label htmlFor="invoice-upload" className="cursor-pointer">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Share2 className="rotate-90" size={24} />
+                                                <span className="text-primary-600 font-medium">Click to upload invoice</span>
+                                                <span className="text-xs text-gray-500">PDF, JPG or PNG (Max 5MB)</span>
+                                            </div>
+                                        </label>
+                                        {formData.invoice && (
+                                            <div className="mt-2 text-sm text-green-600 flex items-center justify-center gap-2">
+                                                <CheckCircle size={14} />
+                                                {formData.invoice.name}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="campaign-documents-section p-6 bg-gray-50 rounded-xl border border-gray-100 mb-8">
+                                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                    <FileText className="text-primary-600" size={20} />
+                                    Required Documents
+                                </h4>
+                                <p className="text-sm text-gray-600 mb-6">These documents are mandatory to verify your campaign and ensure transparency for donors.</p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* Fee Statement */}
+                                    <div className="doc-upload-card">
+                                        <label className="text-sm font-medium text-gray-700 mb-2 block">Fee Statement *</label>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                id="fee-statement-upload"
+                                                onChange={(e) => setFormData(prev => ({ ...prev, feeStatement: e.target.files?.[0] || null }))}
+                                            />
+                                            <label htmlFor="fee-statement-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                                {formData.feeStatement ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${formData.feeStatement ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.feeStatement ? formData.feeStatement.name : 'Upload Fee Statement'}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* ID Document */}
+                                    <div className="doc-upload-card">
+                                        <label className="text-sm font-medium text-gray-700 mb-2 block">ID Document *</label>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                id="id-upload"
+                                                onChange={(e) => setFormData(prev => ({ ...prev, idDocument: e.target.files?.[0] || null }))}
+                                            />
+                                            <label htmlFor="id-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                                {formData.idDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${formData.idDocument ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.idDocument ? formData.idDocument.name : 'Upload ID'}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Proof of Enrollment */}
+                                    <div className="doc-upload-card">
+                                        <label className="text-sm font-medium text-gray-700 mb-2 block">Proof of Enrollment *</label>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                id="enrollment-upload"
+                                                onChange={(e) => setFormData(prev => ({ ...prev, enrollmentDocument: e.target.files?.[0] || null }))}
+                                            />
+                                            <label htmlFor="enrollment-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                                {formData.enrollmentDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${formData.enrollmentDocument ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.enrollmentDocument ? formData.enrollmentDocument.name : 'Upload Enrollment'}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="campaign-end-date">Campaign End Date *</label>
+                                <input
+                                    type="date"
+                                    id="campaign-end-date"
+                                    name="endDate"
+                                    className="form-input"
+                                    value={formData.endDate}
+                                    onChange={(e) => updateFormData('endDate', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="info-box">
+                                <AlertCircle size={20} />
+                                <div>
+                                    <h4>Payment Information</h4>
+                                    <p>
+                                        {campaignType === 'quick_assist'
+                                            ? "Quick Assist funds are accumulated and paid out once the goal is reached."
+                                            : `All funds will be paid directly to ${university.name} using your student number as reference.`}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="form-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-lg"
+                                    onClick={() => setStep(0)}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-lg"
+                                    onClick={() => setStep(2)}
+                                    disabled={
+                                        !formData.title ||
+                                        !formData.goal ||
+                                        !formData.endDate ||
+                                        !imageFile ||
+                                        !formData.feeStatement ||
+                                        !formData.idDocument ||
+                                        !formData.enrollmentDocument ||
+                                        (formData.category === 'stationary' && !formData.invoice)
+                                    }
+                                >
+                                    Continue to Your Story
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 2: Story */}
+                    {step === 2 && (
+                        <div className="campaign-form-step">
+                            <h3>Share Your Story</h3>
+                            <p className="form-description">
+                                This is your chance to connect with donors. Be authentic and share why you need support.
+                            </p>
+
+                            <div className="form-group">
+                                <label className="form-label" htmlFor="campaign-story">Your Story *</label>
+                                <textarea
+                                    id="campaign-story"
+                                    name="story"
+                                    className="form-input form-textarea"
+                                    rows={8}
+                                    placeholder="Tell donors about yourself, your background, your goals, and why you need their support..."
+                                    value={formData.story}
+                                    onChange={(e) => updateFormData('story', e.target.value)}
+                                />
+                                <p className="form-hint">{formData.story.length}/1000 characters (minimum 200 recommended)</p>
+                            </div>
+
+                            <div className="story-tips">
+                                <h4>Tips for a compelling story:</h4>
+                                <ul>
+                                    <li>Share your background and what brought you to this point</li>
+                                    <li>Explain your educational goals and why they matter to you</li>
+                                    <li>Describe how the funding will specifically help you</li>
+                                    <li>Share what you hope to achieve after graduation</li>
+                                    <li>Be authentic – donors connect with real stories</li>
+                                </ul>
+                            </div>
+
+                            <div className="form-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-lg"
+                                    onClick={() => setStep(1)}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-lg"
+                                    onClick={() => setStep(3)}
+                                    disabled={formData.story.length < 50}
+                                >
+                                    Continue to Funding
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 3: Funding Breakdown */}
+                    {step === 3 && (
+                        <div className="campaign-form-step">
+                            <h3>Funding Breakdown</h3>
+                            <p className="form-description">
+                                {campaignType === 'quick_assist'
+                                    ? 'Start your campaign immediately.'
+                                    : 'Explain specifically how the funds will be used. This helps build trust with donors.'}
+                            </p>
+
+                            {campaignType === 'standard' && (
+                                <div className="breakdown-inputs">
+                                    {formData.fundingBreakdown.map((item) => (
+                                        <div key={item.id} className="breakdown-input-row" style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                                            <div className="breakdown-name-wrapper" style={{ flex: 2 }}>
+                                                <input
+                                                    type="text"
+                                                    id={`breakdown-name-${item.id}`}
+                                                    name={`breakdown-name-${item.id}`}
+                                                    aria-label="Item Name"
+                                                    className="form-input"
+                                                    value={item.name}
+                                                    onChange={(e) => updateBreakdownName(item.id, e.target.value)}
+                                                    placeholder="Item Name"
+                                                />
+                                            </div>
+                                            <div className="amount-input-wrapper" style={{ flex: 1 }}>
+                                                <span className="currency-prefix">R</span>
+                                                <input
+                                                    type="number"
+                                                    id={`breakdown-amount-${item.id}`}
+                                                    name={`breakdown-amount-${item.id}`}
+                                                    aria-label="Item Amount"
+                                                    className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                    value={item.amount || ''}
+                                                    placeholder="0"
+                                                    disabled={hasDonations}
+                                                    onChange={(e) => updateBreakdownAmount(item.id, parseInt(e.target.value) || 0)}
+                                                />
+                                            </div>
+                                            {!hasDonations && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-outline btn-sm text-red-500"
+                                                    onClick={() => removeBreakdownItem(item.id)}
+                                                    title="Remove Item"
+                                                    style={{ padding: '8px' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {!hasDonations && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm w-full mt-2 mb-4 dashed-border"
+                                            onClick={addBreakdownItem}
+                                            style={{ borderStyle: 'dashed' }}
+                                        >
+                                            <Plus size={16} /> Add Funding Item
+                                        </button>
+                                    )}
+
+                                    <div className="total-breakdown">
+                                        <span>Total:</span>
+                                        <span className={totalBreakdown !== parseInt(formData.goal) ? 'text-red-500' : 'text-green-600'}>
+                                            R{totalBreakdown.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    {totalBreakdown !== parseInt(formData.goal) && (
+                                        <p className="text-red-500 text-sm mt-2">
+                                            Total breakdown must equal Funding Goal (R{parseInt(formData.goal).toLocaleString()})
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {campaignType === 'quick_assist' && (
+                                <div className="summary-card">
+                                    <h4>Request Summary</h4>
+                                    <div className="summary-row">
+                                        <span>Category:</span>
+                                        <span className="capitalize">{formData.category}</span>
+                                    </div>
+                                    <div className="summary-row">
+                                        <span>Total Amount:</span>
+                                        <span className="font-bold">R{formData.goal}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-500 mt-4">
+                                        By confirming, you agree that this request is urgent and accurate.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="form-actions mt-8">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-lg"
+                                    onClick={() => setStep(2)}
+                                    disabled={submitting}
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-lg"
+                                    disabled={campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) || submitting}
+                                    onClick={handleSubmit}
+                                >
+                                    {submitting ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Launch Campaign')}
+                                </button>
+                            </div>
+
+
+                        </div>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+};
+
+export default StudentDashboard;
