@@ -16,7 +16,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 96px;
+    height: 64px;
+}
+
+@media (min-width: 768px) {
+    .navbar-content {
+        height: 96px;
+    }
 }
 
 /* Logo */
@@ -28,10 +34,16 @@
 }
 
 .logo-image {
-    height: 75px;
+    height: 48px;
     width: auto;
     object-fit: contain;
     /* Background removed */
+}
+
+@media (min-width: 768px) {
+    .logo-image {
+        height: 75px;
+    }
 }
 
 .logo-text {

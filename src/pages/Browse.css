@@ -108,13 +108,20 @@
 /* Campaigns Grid */
 .campaigns-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--spacing-6);
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-3);
+}
+
+@media (max-width: 360px) {
+    .campaigns-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (min-width: 768px) {
     .campaigns-grid {
         grid-template-columns: repeat(2, 1fr);
+        gap: var(--spacing-6);
     }
 }
 
