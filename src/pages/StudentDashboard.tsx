@@ -29,7 +29,8 @@ import {
     XCircle,
     FileText,
     ArrowLeft,
-    Camera
+    Camera,
+    Menu
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
@@ -45,6 +46,7 @@ const StudentDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<string>('overview');
     const [showNotifications, setShowNotifications] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Data state
     const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -368,7 +370,15 @@ const StudentDashboard: React.FC = () => {
         <div className="dashboard-page">
             {/* ... (existing sidebar and main content) */}
 
-            <aside className="dashboard-sidebar">
+            {/* Mobile Sidebar Overlay */}
+            {sidebarOpen && (
+                <div
+                    className="sidebar-overlay"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
+            <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''}`}>
                 <div className="sidebar-header">
                     <Link to="/">
                         <img src="/images/logo.png" alt="UniFund" className="sidebar-brand-image" />
@@ -446,6 +456,13 @@ const StudentDashboard: React.FC = () => {
                 {/* Header */}
                 <header className="dashboard-header">
                     <div className="header-left">
+                        <button
+                            className="mobile-menu-btn"
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            title="Toggle Menu"
+                        >
+                            <Menu size={24} />
+                        </button>
                         {activeTab !== 'overview' && (
                             <button
                                 onClick={() => setActiveTab('overview')}

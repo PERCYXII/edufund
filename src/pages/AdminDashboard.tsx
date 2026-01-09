@@ -25,7 +25,8 @@ import {
     RotateCcw,
     LayoutDashboard,
     ShieldCheck,
-    ArrowLeft
+    ArrowLeft,
+    Menu
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -57,6 +58,7 @@ const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [showNotificationsList, setShowNotificationsList] = useState(false);
     const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // State
     const [verifications, setVerifications] = useState<ExtendedVerification[]>([]);
@@ -925,8 +927,16 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <div className="admin-page">
+            {/* Mobile Sidebar Overlay */}
+            {sidebarOpen && (
+                <div
+                    className="sidebar-overlay"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="admin-sidebar">
+            <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
                 <div className="admin-sidebar-header">
                     <Link to="/">
                         <img src="/images/logo.png" alt="UniFund Admin" className="admin-brand-image" />
@@ -1037,6 +1047,13 @@ const AdminDashboard: React.FC = () => {
                 {/* Header */}
                 <header className="admin-header">
                     <div className="admin-header-left">
+                        <button
+                            className="mobile-menu-btn"
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            title="Toggle Menu"
+                        >
+                            <Menu size={24} />
+                        </button>
                         {activeTab !== 'dashboard' && (
                             <button
                                 onClick={() => setActiveTab('dashboard')}

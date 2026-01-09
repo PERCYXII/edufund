@@ -34,8 +34,12 @@ const AdminReports: React.FC<AdminReportsProps> = ({ transactions, stats }) => {
     const [universityFilter, setUniversityFilter] = useState('');
     const [studentNumberFilter, setStudentNumberFilter] = useState('');
 
-    // Calculate Platform Fees (Assumed 5% for demo)
-    const platformFees = stats.totalFunded * 0.05;
+    // Calculate ACTUAL Platform Revenue (Donations with no campaign_id)
+    const platformRevenue = useMemo(() => {
+        return transactions
+            .filter(t => !t.campaign_id || t.campaign_id === null)
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+    }, [transactions]);
 
     // Calculate Monthly Trends (simplified)
     const monthlyStats = useMemo(() => {
@@ -139,8 +143,12 @@ const AdminReports: React.FC<AdminReportsProps> = ({ transactions, stats }) => {
                         <TrendingUp size={24} />
                     </div>
                     <div className="admin-stat-info">
-                        <span className="admin-stat-label">Estimated Revenue (5%)</span>
-                        <span className="admin-stat-value">{formatCurrency(platformFees)}</span>
+                        <span className="admin-stat-label">Platform Support (Donations)</span>
+                        <span className="admin-stat-value">{formatCurrency(platformRevenue)}</span>
+                        <div className="stat-trend positive">
+                            <TrendingUp size={14} />
+                            <span>100% Voluntary</span>
+                        </div>
                     </div>
                 </div>
 
