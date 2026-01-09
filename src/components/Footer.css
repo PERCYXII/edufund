@@ -156,18 +156,30 @@
     pointer-events: none;
 }
 
-.footer-government-logo {
+.footer-trust-logos {
     margin-top: var(--spacing-2);
     display: flex;
     align-items: center;
+    gap: var(--spacing-3);
+    flex-wrap: wrap;
+}
+
+.trust-logo {
+    height: 50px;
+    width: auto;
+    object-fit: contain;
+    background: white;
+    padding: var(--spacing-1);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: transform var(--transition-fast);
+}
+
+.trust-logo:hover {
+    transform: scale(1.05);
 }
 
 .dept-logo {
     height: 60px;
-    width: auto;
-    object-fit: contain;
-    background: white;
     padding: var(--spacing-2);
-    border-radius: var(--radius-md);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }

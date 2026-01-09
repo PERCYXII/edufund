@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
     ArrowRight,
     ArrowLeft,
@@ -9,7 +9,8 @@ import {
     AlertCircle,
     Info,
     User,
-    LogOut
+    LogOut,
+    Lock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { YEAR_OPTIONS, ACCEPTED_DOCUMENTS } from '../data/constants';
@@ -473,6 +474,14 @@ const CompleteProfile: React.FC = () => {
                                 <div className="alert alert-info mb-4">
                                     <Info size={20} />
                                     <p>All uploaded documents <strong>must be certified</strong> (not older than 3 months).</p>
+                                </div>
+
+                                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg mb-6 flex gap-3 text-sm text-emerald-800">
+                                    <Lock size={20} className="shrink-0 text-emerald-600" />
+                                    <div>
+                                        <p className="font-semibold">Secure & Private</p>
+                                        <p>Your documents are encrypted and handled strictly according to <strong>POPIA</strong> regulations. We only use this data for verification. <Link to="/privacy" className="underline font-medium hover:text-emerald-900">View Privacy Policy</Link></p>
+                                    </div>
                                 </div>
 
                                 <div className="form-group">

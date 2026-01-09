@@ -11,7 +11,8 @@ import {
     Eye,
     ArrowRight,
     Clock,
-    CheckCircle
+    CheckCircle,
+    Lock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { CampaignWithStudent } from '../types';
@@ -474,6 +475,7 @@ const Landing: React.FC = () => {
                         {[
                             { icon: Shield, title: "Verified Students", desc: "Every student is verified through official enrollment documents and university records" },
                             { icon: Building, title: "Direct to Institution", desc: "Funds are paid directly to university accounts using student numbers as reference – never to personal accounts" },
+                            { icon: Lock, title: "Data Protection", desc: "We are fully POPIA compliant. Your documents are encrypted and only used for legitimate verification purposes." },
                             { icon: Eye, title: "Full Transparency", desc: "Track exactly where your money goes with detailed payment confirmations and university receipts" }
                         ].map((item, idx) => (
                             <div key={idx} className="trust-card">
@@ -484,6 +486,15 @@ const Landing: React.FC = () => {
                                 <p className="trust-desc">{item.desc}</p>
                             </div>
                         ))}
+                    </div>
+
+                    <div className="landing-trust-logos mt-16">
+                        <p className="trust-values-title">Rooted in Ubuntu & Local Impact</p>
+                        <div className="flex justify-center items-center gap-8 flex-wrap">
+                            <img src="/images/logos/proudly-south-african-logo.png" alt="Proudly South African" className="landing-v-logo" />
+                            <img src="/images/dept-education-logo.jpg" alt="South African Department of Education" className="landing-v-logo" />
+                            <img src="/images/logos/ubuntu-logo.jpg" alt="Ubuntu - Humanity Towards Others" className="landing-v-logo" />
+                        </div>
                     </div>
                 </div>
             </section>

@@ -16,6 +16,11 @@ import Settings from './pages/Settings';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Notifications from './pages/Notifications';
+import Privacy from './pages/Privacy';
+import HelpCenter from './pages/HelpCenter';
+import Contact from './pages/Contact';
+import Terms from './pages/Terms';
+import Refund from './pages/Refund';
 
 // Import page-specific CSS
 import './pages/Landing.css';
@@ -59,6 +64,12 @@ function App() {
                     <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/help" element={<HelpCenter />} />
+                    <Route path="/faq" element={<HelpCenter />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/refund" element={<Refund />} />
                     <Route path="/how-it-works" element={<Landing />} />
                   </Routes>
                   <Footer />

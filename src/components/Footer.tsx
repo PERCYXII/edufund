@@ -6,7 +6,7 @@ import PlatformDonationButton from './PlatformDonationButton';
 import './Footer.css';
 
 const Footer: React.FC = () => {
-    const { isLoggedIn } = useAuth();
+    const { isLoggedIn, user } = useAuth();
     const [showCopyTooltip, setShowCopyTooltip] = useState(false);
 
     const shareUrl = window.location.href; // Get current page URL
@@ -30,8 +30,10 @@ const Footer: React.FC = () => {
                         <p className="footer-tagline">
                             Empowering students through transparent, direct educational funding.
                         </p>
-                        <div className="footer-government-logo">
-                            <img src="/images/dept-education-logo.jpg" alt="Department of Education South Africa" className="dept-logo" />
+                        <div className="footer-trust-logos">
+                            <img src="/images/dept-education-logo.jpg" alt="Department of Education South Africa" className="trust-logo dept-logo" />
+                            <img src="/images/logos/proudly-south-african-logo.png" alt="Proudly South African" className="trust-logo" />
+                            <img src="/images/logos/ubuntu-logo.jpg" alt="Ubuntu" className="trust-logo" />
                         </div>
 
                         {/* Social Sharing */}
@@ -97,7 +99,11 @@ const Footer: React.FC = () => {
                         <h4 className="footer-heading">Platform</h4>
                         <ul className="footer-links">
                             <li><Link to="/browse">Browse Campaigns</Link></li>
-                            <li><Link to={isLoggedIn ? "/dashboard" : "/register/student"}>{isLoggedIn ? "Go to Dashboard" : "Start a Campaign"}</Link></li>
+                            <li>
+                                <Link to={isLoggedIn ? (user?.role === 'admin' ? "/admin" : "/dashboard") : "/register/student"}>
+                                    {isLoggedIn ? "Go to Dashboard" : "Start a Campaign"}
+                                </Link>
+                            </li>
                             <li><Link to="/how-it-works">How It Works</Link></li>
                         </ul>
                     </div>

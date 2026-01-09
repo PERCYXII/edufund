@@ -885,3 +885,40 @@
     display: inline-block;
     margin: 0 2px;
 }
+
+.landing-trust-logos {
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: var(--spacing-12);
+}
+
+.trust-values-title {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-accent-yellow);
+    margin-bottom: var(--spacing-10);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.landing-v-logo {
+    height: 70px;
+    width: auto;
+    object-fit: contain;
+    background: white;
+    padding: var(--spacing-3);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-normal);
+}
+
+.landing-v-logo:hover {
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 640px) {
+    .landing-v-logo {
+        height: 50px;
+    }
+}
