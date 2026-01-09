@@ -238,7 +238,7 @@ const AdminDashboard: React.FC = () => {
                 .select(`
                     *,
                     student:students (
-                        first_name, last_name, course, student_number, email,
+                        first_name, last_name, course, student_number,
                         university:universities (name)
                     )
                 `)
@@ -251,7 +251,7 @@ const AdminDashboard: React.FC = () => {
                 .select(`
                     *,
                     student:students (
-                        first_name, last_name, course, student_number, email,
+                        first_name, last_name, course, student_number,
                         university:universities (name)
                     )
                 `)

@@ -39,9 +39,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const isFetchingRef = React.useRef(false);
 
     // Fetch user profile based on auth session
     const fetchUserProfile = async (sessionUser: any) => {
+        // Prevent duplicate fetches
+        if (isFetchingRef.current) {
+            return null;
+        }
+        isFetchingRef.current = true;
         setIsLoading(true);
         try {
             // Get profile to check role
@@ -154,6 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
             return null;
         } finally {
+            isFetchingRef.current = false;
             setIsLoading(false);
         }
     };
