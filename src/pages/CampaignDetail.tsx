@@ -51,7 +51,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
 
     // Platform Tip State
     const [tipAmount, setTipAmount] = useState('');
-    const [paystackRef, setPaystackRef] = useState(() => 'TIP_' + Math.floor((Math.random() * 1000000000) + 1));
+    const [paystackRef] = useState(() => 'TIP_' + Math.floor((Math.random() * 1000000000) + 1));
 
     const config = {
         reference: paystackRef,
