@@ -382,19 +382,46 @@ const Landing: React.FC = () => {
                         <p className="section-subtitle">We work with South Africa's leading universities, universities of technology, and TVET colleges</p>
                     </div>
 
-                    {/* University Logos */}
-                    <div className="logos-row">
-                        <div className="logo-item">
-                            <img src="/images/logos/wits-logo.jpg" alt="University of the Witwatersrand" />
-                        </div>
-                        <div className="logo-item">
-                            <img src="/images/logos/uj-logo.jpg" alt="University of Johannesburg" />
-                        </div>
-                        <div className="logo-item">
-                            <img src="/images/logos/tut-logo.png" alt="Tshwane University of Technology" />
-                        </div>
-                        <div className="logo-item">
-                            <img src="/images/logos/cjc-logo.png" alt="Central Johannesburg TVET College" />
+                    {/* University Logos Carousel */}
+                    <div className="logos-carousel-container">
+                        <div className="logos-carousel">
+                            <div className="logos-track">
+                                {/* First set of logos */}
+                                <div className="logo-item"><img src="/images/logos/wits-logo.jpg" alt="Wits University" /></div>
+                                <div className="logo-item"><img src="/images/logos/uj-logo.jpg" alt="University of Johannesburg" /></div>
+                                <div className="logo-item"><img src="/images/logos/tut-logo.png" alt="Tshwane University of Technology" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of cape town logo.png" alt="University of Cape Town" /></div>
+                                <div className="logo-item"><img src="/images/logos/stellenbosch university logo.png" alt="Stellenbosch University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of pretoria logo.png" alt="University of Pretoria" /></div>
+                                <div className="logo-item"><img src="/images/logos/nelson-mandela-university-logo.png" alt="Nelson Mandela University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of kwazulu-natal logo.png" alt="University of KwaZulu-Natal" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of free state logo.png" alt="University of Free State" /></div>
+                                <div className="logo-item"><img src="/images/logos/rhodes university logo.png" alt="Rhodes University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of south africa logo.png" alt="UNISA" /></div>
+                                <div className="logo-item"><img src="/images/logos/northwestern university logo.png" alt="North-West University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of western cape logo.png" alt="University of Western Cape" /></div>
+                                <div className="logo-item"><img src="/images/logos/cape peninsula university of technology logo.png" alt="CPUT" /></div>
+                                <div className="logo-item"><img src="/images/logos/durban university of technology logo.jpg" alt="DUT" /></div>
+                                <div className="logo-item"><img src="/images/logos/central university of technology logo.png" alt="CUT" /></div>
+                                <div className="logo-item"><img src="/images/logos/mangosuthu university of technology logo.png" alt="MUT" /></div>
+                                <div className="logo-item"><img src="/images/logos/sol plaatje university logo.png" alt="Sol Plaatje University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of mpumalanga logo.jpg" alt="University of Mpumalanga" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of limpopo logo.png" alt="University of Limpopo" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of venda logo.png" alt="University of Venda" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of zululand logo.png" alt="University of Zululand" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of fort hare logo.png" alt="University of Fort Hare" /></div>
+                                <div className="logo-item"><img src="/images/logos/walter sisulu university logo.png" alt="Walter Sisulu University" /></div>
+                                <div className="logo-item"><img src="/images/logos/cjc-logo.png" alt="Central Johannesburg College" /></div>
+                                {/* Duplicate set for seamless loop */}
+                                <div className="logo-item"><img src="/images/logos/wits-logo.jpg" alt="Wits University" /></div>
+                                <div className="logo-item"><img src="/images/logos/uj-logo.jpg" alt="University of Johannesburg" /></div>
+                                <div className="logo-item"><img src="/images/logos/tut-logo.png" alt="Tshwane University of Technology" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of cape town logo.png" alt="University of Cape Town" /></div>
+                                <div className="logo-item"><img src="/images/logos/stellenbosch university logo.png" alt="Stellenbosch University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of pretoria logo.png" alt="University of Pretoria" /></div>
+                                <div className="logo-item"><img src="/images/logos/nelson-mandela-university-logo.png" alt="Nelson Mandela University" /></div>
+                                <div className="logo-item"><img src="/images/logos/university of kwazulu-natal logo.png" alt="University of KwaZulu-Natal" /></div>
+                            </div>
                         </div>
                     </div>
 
@@ -411,15 +438,6 @@ const Landing: React.FC = () => {
                         </div>
                         <div className="university-card">
                             <div className="university-image">
-                                <img src="/images/wits-campus.png" alt="University of the Witwatersrand" />
-                            </div>
-                            <div className="university-info">
-                                <h3>Wits University</h3>
-                                <p>WITS</p>
-                            </div>
-                        </div>
-                        <div className="university-card">
-                            <div className="university-image">
                                 <img src="/images/stellenbosch-campus.png" alt="Stellenbosch University" />
                             </div>
                             <div className="university-info">
@@ -427,18 +445,28 @@ const Landing: React.FC = () => {
                                 <p>SU</p>
                             </div>
                         </div>
+
                         <div className="university-card">
                             <div className="university-image">
-                                <img src="/images/up-campus.png" alt="University of Pretoria" />
+                                <img src="/images/cape peninsula university of technology building.jpg" alt="Cape Peninsula University of Technology" />
                             </div>
                             <div className="university-info">
-                                <h3>University of Pretoria</h3>
-                                <p>UP / Tuks</p>
+                                <h3>Cape Peninsula University of Technology</h3>
+                                <p>CPUT</p>
                             </div>
                         </div>
                         <div className="university-card">
                             <div className="university-image">
-                                <img src="/images/uj-campus.png" alt="University of Johannesburg" />
+                                <img src="/images/sefako makgatho health sciences university building.jpg" alt="Sefako Makgatho Health Sciences University" />
+                            </div>
+                            <div className="university-info">
+                                <h3>Sefako Makgatho University</h3>
+                                <p>SMU</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/spu-campus.jpg" alt="Sol Plaatje University" />
                             </div>
                             <div className="university-info">
                                 <h3>University of Johannesburg</h3>
@@ -447,11 +475,20 @@ const Landing: React.FC = () => {
                         </div>
                         <div className="university-card">
                             <div className="university-image">
-                                <img src="/images/tut-campus.png" alt="Tshwane University of Technology" />
+                                <img src="/images/University of the Witwatersrand building.jpg" alt="University of the Witwatersrand Building" />
                             </div>
                             <div className="university-info">
-                                <h3>Tshwane University of Technology</h3>
-                                <p>TUT</p>
+                                <h3>Wits Great Hall</h3>
+                                <p>WITS</p>
+                            </div>
+                        </div>
+                        <div className="university-card">
+                            <div className="university-image">
+                                <img src="/images/university of pretoria building.jpg" alt="University of Pretoria Building" />
+                            </div>
+                            <div className="university-info">
+                                <h3>UP Main Campus</h3>
+                                <p>UP / Tuks</p>
                             </div>
                         </div>
                     </div>

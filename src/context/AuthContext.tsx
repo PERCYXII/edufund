@@ -160,6 +160,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Check for existing session on mount
     useEffect(() => {
+        let lastVisibilityFetch = 0;
+
         const initializeAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
@@ -170,7 +172,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
                     setIsLoading(true);
                     await fetchUserProfile(session.user);
                 } else if (event === 'SIGNED_OUT') {
@@ -180,7 +182,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
             });
 
-            return () => subscription.unsubscribe();
+            // Handle tab visibility changes - re-sync auth when user returns
+            // Debounced to prevent excessive re-fetching
+            const handleVisibilityChange = async () => {
+                if (document.visibilityState === 'visible') {
+                    const now = Date.now();
+                    // Only re-fetch if more than 30 seconds have passed since last fetch
+                    if (now - lastVisibilityFetch < 30000) {
+                        return;
+                    }
+                    lastVisibilityFetch = now;
+
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user) {
+                        // Don't set loading state to avoid UI flicker
+                        await fetchUserProfile(session.user);
+                    }
+                }
+            };
+
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            return () => {
+                subscription.unsubscribe();
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            };
         };
 
         initializeAuth();

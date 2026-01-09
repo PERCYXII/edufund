@@ -498,41 +498,110 @@
     background: white;
 }
 
-/* University Logos Row */
-.logos-row {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: var(--spacing-8);
+/* University Logos Carousel */
+.logos-carousel-container {
     margin-bottom: var(--spacing-10);
-    padding: var(--spacing-6);
+    overflow: hidden;
+    position: relative;
     background: var(--color-gray-50);
     border-radius: var(--radius-xl);
+    padding: var(--spacing-6) 0;
+}
+
+.logos-carousel-container::before,
+.logos-carousel-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.logos-carousel-container::before {
+    left: 0;
+    background: linear-gradient(to right, var(--color-gray-50), transparent);
+}
+
+.logos-carousel-container::after {
+    right: 0;
+    background: linear-gradient(to left, var(--color-gray-50), transparent);
+}
+
+.logos-carousel {
+    overflow: hidden;
+    width: 100%;
+}
+
+.logos-track {
+    display: flex;
+    gap: var(--spacing-8);
+    animation: scroll-logos 40s linear infinite;
+    width: max-content;
+}
+
+.logos-track:hover {
+    animation-play-state: paused;
+}
+
+@keyframes scroll-logos {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
 }
 
 .logo-item {
     flex: 0 0 auto;
-    max-width: 150px;
-    height: 80px;
+    width: 160px;
+    height: 90px;
     display: flex;
     align-items: center;
     justify-content: center;
-    filter: grayscale(20%);
-    opacity: 0.9;
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     transition: all var(--transition-normal);
+    overflow: hidden;
 }
 
 .logo-item:hover {
-    filter: grayscale(0%);
-    opacity: 1;
-    transform: scale(1.05);
+    transform: scale(1.1);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 }
 
 .logo-item img {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    filter: grayscale(20%);
+    transition: filter var(--transition-normal);
+}
+
+.logo-item:hover img {
+    filter: grayscale(0%);
+}
+
+@media (max-width: 768px) {
+    .logo-item {
+        width: 120px;
+        height: 70px;
+    }
+
+    .logos-track {
+        gap: var(--spacing-4);
+        animation-duration: 30s;
+    }
+
+    .logos-carousel-container::before,
+    .logos-carousel-container::after {
+        width: 40px;
+    }
 }
 
 .universities-grid {
