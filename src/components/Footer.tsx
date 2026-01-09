@@ -18,6 +18,10 @@ const Footer: React.FC = () => {
         setTimeout(() => setShowCopyTooltip(false), 2000);
     };
 
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     return (
         <footer className="footer">
             <div className="container">
@@ -98,31 +102,31 @@ const Footer: React.FC = () => {
                     <div className="footer-links-group">
                         <h4 className="footer-heading">Platform</h4>
                         <ul className="footer-links">
-                            <li><Link to="/browse">Browse Campaigns</Link></li>
+                            <li><Link to="/browse" onClick={scrollToTop}>Browse Campaigns</Link></li>
                             <li>
-                                <Link to={isLoggedIn ? (user?.role === 'admin' ? "/admin" : "/dashboard") : "/register/student"}>
+                                <Link to={isLoggedIn ? (user?.role === 'admin' ? "/admin" : "/dashboard") : "/register/student"} onClick={scrollToTop}>
                                     {isLoggedIn ? "Go to Dashboard" : "Start a Campaign"}
                                 </Link>
                             </li>
-                            <li><Link to="/how-it-works">How It Works</Link></li>
+                            <li><Link to="/how-it-works" onClick={scrollToTop}>How It Works</Link></li>
                         </ul>
                     </div>
 
                     <div className="footer-links-group">
                         <h4 className="footer-heading">Support</h4>
                         <ul className="footer-links">
-                            <li><Link to="/help">Help Center</Link></li>
-                            <li><Link to="/contact">Contact Us</Link></li>
-                            <li><Link to="/faq">FAQs</Link></li>
+                            <li><Link to="/help" onClick={scrollToTop}>Help Center</Link></li>
+                            <li><Link to="/contact" onClick={scrollToTop}>Contact Us</Link></li>
+                            <li><Link to="/faq" onClick={scrollToTop}>FAQs</Link></li>
                         </ul>
                     </div>
 
                     <div className="footer-links-group">
                         <h4 className="footer-heading">Legal</h4>
                         <ul className="footer-links">
-                            <li><Link to="/privacy">Privacy Policy</Link></li>
-                            <li><Link to="/terms">Terms of Service</Link></li>
-                            <li><Link to="/refund">Refund Policy</Link></li>
+                            <li><Link to="/privacy" onClick={scrollToTop}>Privacy Policy</Link></li>
+                            <li><Link to="/terms" onClick={scrollToTop}>Terms of Service</Link></li>
+                            <li><Link to="/refund" onClick={scrollToTop}>Refund Policy</Link></li>
                         </ul>
                     </div>
                 </div>

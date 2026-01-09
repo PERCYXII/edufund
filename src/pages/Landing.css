@@ -991,3 +991,109 @@
         height: 50px;
     }
 }
+
+/* Ubuntu Giving Section */
+.ubuntu-section {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    padding: var(--spacing-20) 0;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.ubuntu-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('/images/logos/ubuntu-logo.jpg') center center no-repeat;
+    background-size: 400px;
+    opacity: 0.03;
+    pointer-events: none;
+}
+
+.ubuntu-content {
+    position: relative;
+    z-index: 1;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.ubuntu-icon {
+    margin-bottom: var(--spacing-6);
+}
+
+.ubuntu-logo-large {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+    border-radius: 50%;
+    box-shadow: 0 10px 40px rgba(255, 193, 7, 0.3);
+}
+
+.ubuntu-quote {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    color: var(--color-accent-yellow);
+    font-style: italic;
+    margin-bottom: var(--spacing-2);
+    letter-spacing: 0.02em;
+}
+
+.ubuntu-translation {
+    font-size: var(--font-size-lg);
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: var(--spacing-8);
+    font-weight: 500;
+}
+
+.ubuntu-message {
+    font-size: var(--font-size-lg);
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.9;
+    margin-bottom: var(--spacing-10);
+}
+
+.ubuntu-values {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-12);
+    flex-wrap: wrap;
+}
+
+.ubuntu-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-3);
+    color: var(--color-accent-yellow);
+}
+
+.ubuntu-value svg {
+    opacity: 0.9;
+}
+
+.ubuntu-value span {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 768px) {
+    .ubuntu-quote {
+        font-size: var(--font-size-2xl);
+    }
+
+    .ubuntu-values {
+        gap: var(--spacing-8);
+    }
+
+    .ubuntu-logo-large {
+        width: 80px;
+        height: 80px;
+    }
+}

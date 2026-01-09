@@ -12,7 +12,8 @@ import {
     ArrowRight,
     Clock,
     CheckCircle,
-    Lock
+    Lock,
+    Sparkles
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { CampaignWithStudent } from '../types';
@@ -72,9 +73,12 @@ const Landing: React.FC = () => {
     });
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [heroImages] = useState([
-        '/images/hero-bg-1.jpg',
-        '/images/hero-bg-2.jpg',
-        '/images/hero-bg-3.jpg'
+        '/images/uct-campus.png',
+        '/images/wits-campus.png',
+        '/images/stellenbosch-campus.png',
+        '/images/up-campus.png',
+        '/images/uj-campus.png',
+        '/images/tut-campus.png'
     ]);
     const location = useLocation();
 
@@ -511,9 +515,9 @@ const Landing: React.FC = () => {
                     <div className="trust-grid">
                         {[
                             { icon: Shield, title: "Verified Students", desc: "Every student is verified through official enrollment documents and university records" },
-                            { icon: Building, title: "Direct to Institution", desc: "Funds are paid directly to university accounts using student numbers as reference – never to personal accounts" },
+                            { icon: Building, title: "Direct to University", desc: "You pay directly to the university – UniFund never holds student funds. Your donation is transferred immediately using the student number as reference." },
                             { icon: Lock, title: "Data Protection", desc: "We are fully POPIA compliant. Your documents are encrypted and only used for legitimate verification purposes." },
-                            { icon: Eye, title: "Full Transparency", desc: "Track exactly where your money goes with detailed payment confirmations and university receipts" }
+                            { icon: Eye, title: "Full Transparency", desc: "Track exactly where your money goes with detailed payment confirmations from the university" }
                         ].map((item, idx) => (
                             <div key={idx} className="trust-card">
                                 <div className="trust-icon">
@@ -586,14 +590,14 @@ const Landing: React.FC = () => {
                             </div>
                             <h2 className="support-title">Support UniFund</h2>
                             <p className="support-desc">
-                                Help us keep the platform running and continue supporting students in need.
-                                Your donation to UniFund ensures we can maintain our services, verify students,
-                                and connect deserving learners with generous donors.
+                                Unlike student campaign donations (which go directly to universities),
+                                your donation here goes to UniFund to keep our platform running.
+                                This helps us verify students, maintain the website, and connect deserving learners with donors.
                             </p>
                             <div className="support-features">
                                 <div className="support-feature">
                                     <CheckCircle size={20} />
-                                    <span>Keep the platform running</span>
+                                    <span>100% goes to platform operations</span>
                                 </div>
                                 <div className="support-feature">
                                     <CheckCircle size={20} />
@@ -609,6 +613,42 @@ const Landing: React.FC = () => {
                                 onDonationSuccess={handleDonationSuccess}
                             />
                             <p className="support-note">Every contribution helps us help more students</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Ubuntu Giving Message */}
+            <section className="section ubuntu-section">
+                <div className="container">
+                    <div className="ubuntu-content">
+                        <div className="ubuntu-icon">
+                            <img src="/images/logos/ubuntu-logo.jpg" alt="Ubuntu" className="ubuntu-logo-large" />
+                        </div>
+                        <blockquote className="ubuntu-quote">
+                            "Umuntu ngumuntu ngabantu"
+                        </blockquote>
+                        <p className="ubuntu-translation">
+                            "I am because we are" – the spirit of Ubuntu
+                        </p>
+                        <p className="ubuntu-message">
+                            In South Africa, we believe that our humanity is intertwined. When we lift one student,
+                            we lift an entire family – and ultimately, our whole community. Your small act of giving
+                            creates ripples that transform lives for generations. This is the power of Ubuntu in action.
+                        </p>
+                        <div className="ubuntu-values">
+                            <div className="ubuntu-value">
+                                <Heart size={24} />
+                                <span>Compassion</span>
+                            </div>
+                            <div className="ubuntu-value">
+                                <Users size={24} />
+                                <span>Community</span>
+                            </div>
+                            <div className="ubuntu-value">
+                                <Sparkles size={24} />
+                                <span>Hope</span>
+                            </div>
                         </div>
                     </div>
                 </div>

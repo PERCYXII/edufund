@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronUp, Mail, MessageSquare, Phone } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Mail, Phone, HelpCircle } from 'lucide-react';
 import './InfoPages.css';
 
 const FAQ_DATA = [
@@ -9,11 +9,11 @@ const FAQ_DATA = [
     },
     {
         question: "Where does my donation go?",
-        answer: "100% of your donation (minus payment processing fees) is paid directly to the university's managed student account. We use the student number as a reference to ensure the funds are allocated correctly to that specific student's tuition or residence fees."
+        answer: "Your donation goes directly and immediately to the university's student account. UniFund never holds any donor funds – you pay straight to the institution using the student's number as reference. This ensures your contribution is allocated correctly to that specific student's tuition or fees."
     },
     {
-        question: "Can I get a tax certificate for my donation?",
-        answer: "Yes, UniFund is a registered non-profit organization. You can request a Section 18A tax certificate for your donations at the end of the financial year. Please ensure you provide your full details during the donation process."
+        question: "Does UniFund hold my money?",
+        answer: "No. UniFund is a transparent platform that connects donors with verified students. When you donate, your payment goes directly to the university's bank account, not to UniFund or the student personally. We never hold or manage donor funds."
     },
     {
         question: "What happens if a campaign doesn't reach its goal?",
@@ -22,6 +22,10 @@ const FAQ_DATA = [
     {
         question: "How can I start my own campaign?",
         answer: "If you are a registered student at a South African university or TVET college, you can sign up as a student, complete your profile with the required documents, and submit your campaign for review."
+    },
+    {
+        question: "Is my personal information safe?",
+        answer: "Yes. We are fully POPIA compliant. Your documents are encrypted and only used for legitimate verification purposes. We never share your personal information with third parties."
     }
 ];
 
@@ -95,16 +99,16 @@ const HelpCenter: React.FC = () => {
                             <a href="mailto:support@unifund.co.za" className="info-card-link">support@unifund.co.za</a>
                         </div>
                         <div className="info-card">
-                            <MessageSquare size={32} className="text-success-500" />
-                            <h3>Live Chat</h3>
-                            <p>Available Monday to Friday, 8am - 5pm SAST.</p>
-                            <button className="btn btn-outline btn-sm mt-4">Start Chat</button>
-                        </div>
-                        <div className="info-card">
                             <Phone size={32} className="text-blue-400" />
                             <h3>Call Us</h3>
                             <p>Direct assistance for urgent verification matters.</p>
                             <a href="tel:+27111234567" className="info-card-link">+27 11 123 4567</a>
+                        </div>
+                        <div className="info-card">
+                            <HelpCircle size={32} className="text-amber-400" />
+                            <h3>WhatsApp</h3>
+                            <p>Quick support via WhatsApp during business hours.</p>
+                            <a href="https://wa.me/27820000000" target="_blank" rel="noopener noreferrer" className="info-card-link">+27 82 000 0000</a>
                         </div>
                     </div>
                 </div>

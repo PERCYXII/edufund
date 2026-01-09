@@ -34,9 +34,9 @@ const Terms: React.FC = () => {
                         <div className="terms-section">
                             <div className="section-title-with-icon">
                                 <Globe className="text-blue-600" />
-                                <h2>3. Donation Allocation</h2>
+                                <h2>3. Donation Model</h2>
                             </div>
-                            <p>UniFund operates as a facilitator. Donations made to student campaigns are paid directly to the university's managed student account. UniFund does not guarantee that any campaign will reach its funding goal.</p>
+                            <p>UniFund is a transparent connector platform. <strong>We do not hold, manage, or process donor funds intended for students.</strong> When you donate to a student campaign, your payment is transferred directly and immediately to the university's bank account using the student number as a reference. UniFund does not guarantee that any campaign will reach its funding goal.</p>
                         </div>
 
                         <div className="terms-section">
@@ -44,12 +44,12 @@ const Terms: React.FC = () => {
                                 <Scale className="text-purple-600" />
                                 <h2>4. Fees and Charges</h2>
                             </div>
-                            <p>While UniFund strives to keep fees at a minimum, third-party payment processors (like Paystack) charge a processing fee on each transaction. These fees are deducted from the donated amount before transfer to the university.</p>
+                            <p>Third-party payment processors (like Paystack) charge processing fees on each transaction. These fees are deducted from the donated amount. UniFund may receive separate voluntary platform donations from users who wish to support our operational costs.</p>
                         </div>
 
                         <div className="terms-section">
                             <h2>5. Limitation of Liability</h2>
-                            <p>UniFund is not liable for any disputes between donors and students. We act solely as a verification and payment facilitation platform.</p>
+                            <p>UniFund is not liable for any disputes between donors, students, or universities. We act solely as a verification and connection platform. Since student donations are paid directly to universities and not held by UniFund, <strong>we cannot offer refunds or retrieve funds once a transaction is completed.</strong> Any payment-related issues should be directed to the payment processor or the receiving university.</p>
                         </div>
                     </div>
 
