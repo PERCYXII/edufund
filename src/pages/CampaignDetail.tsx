@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { usePaystackPayment } from 'react-paystack';
 import {
     ArrowLeft,
     CheckCircle,
@@ -33,7 +34,7 @@ interface PaymentModalProps {
     onSuccess: () => void;
 }
 
-const PAYSTACK_PUBLIC_KEY = 'pk_test_7a70161c3f2718d3ef9d6a8308fc1c677b4ca5be';
+const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_7a70161c3f2718d3ef9d6a8308fc1c677b4ca5be';
 
 const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, onSuccess }) => {
     const { error: toastError } = useToast();
@@ -50,6 +51,31 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
 
     // Platform Tip State
     const [tipAmount, setTipAmount] = useState('');
+    const [paystackRef, setPaystackRef] = useState(() => 'TIP_' + Math.floor((Math.random() * 1000000000) + 1));
+
+    const config = {
+        reference: paystackRef,
+        email: email || 'guest@unifund.co.za',
+        amount: (parseFloat(tipAmount) || 0) * 100, // In cents
+        publicKey: PAYSTACK_PUBLIC_KEY,
+        currency: 'ZAR',
+        metadata: {
+            custom_fields: [
+                {
+                    display_name: "Donation Type",
+                    variable_name: "donation_type",
+                    value: "platform_tip_post_campaign"
+                },
+                {
+                    display_name: "Linked Campaign",
+                    variable_name: "linked_campaign_id",
+                    value: campaign.id
+                }
+            ]
+        },
+    };
+
+    const initializePayment = usePaystackPayment(config);
 
     const handleStudentDonationSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,6 +106,33 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
 
             if (donationError) throw donationError;
 
+            // --- NOTIFICATIONS ---
+
+            // 1. Notify Student
+            await supabase.from('notifications').insert({
+                user_id: campaign.student.id, // Target the student
+                title: 'New Donation Received 💸',
+                message: `You have received a new donation of R${amount} from ${isAnonymous ? 'an anonymous donor' : `${firstName} ${lastName}`}. It is currently pending verification.`,
+                type: 'donation_received'
+            });
+
+            // 2. Notify Admins
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            if (admins && admins.length > 0) {
+                const adminNotifications = admins.map(admin => ({
+                    user_id: admin.id, // Target the admin
+                    title: 'New Pending Donation 💰',
+                    message: `A new donation of R${amount} for "${campaign.title}" needs verification.`,
+                    type: 'verification_update'
+                }));
+
+                await supabase.from('notifications').insert(adminNotifications);
+            }
+
             // Move to Tip Prompt
             setStep(3);
 
@@ -91,73 +144,39 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
         }
     };
 
+    const onPaystackSuccess = async (response: any) => {
+        try {
+            setSubmitting(true);
+            // Record the successful donation
+            const { error: donationError } = await supabase
+                .from('donations')
+                .insert({
+                    campaign_id: null, // Platform donation
+                    amount: parseFloat(tipAmount),
+                    is_anonymous: isAnonymous,
+                    proof_of_payment_url: 'paystack_ref_' + (response.reference || paystackRef),
+                    status: 'received', // Auto-verified
+                    guest_name: isAnonymous ? 'Anonymous' : `${firstName} ${lastName}`.trim(),
+                    guest_email: isAnonymous ? null : email
+                });
+
+            if (donationError) throw donationError;
+            setStep(7); // Final Success
+        } catch (err) {
+            console.error("Error recording tip:", err);
+            toastError("Error", "Donation processed but failed to record in system. Please contact support.");
+            setStep(7); // Still show success as payment went through
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handlePaystackSupport = () => {
         const amt = parseFloat(tipAmount);
         if (!amt || amt <= 0) return;
 
-        setSubmitting(true);
-
-        // Dynamically load Paystack script
-        const script = document.createElement('script');
-        script.src = 'https://js.paystack.co/v1/inline.js';
-        script.onload = () => {
-            const handler = (window as any).PaystackPop.setup({
-                key: PAYSTACK_PUBLIC_KEY,
-                email: email || 'guest@UniFund.co.za', // Fallback if somehow empty
-                amount: amt * 100, // In cents
-                currency: 'ZAR',
-                ref: 'TIP_' + Math.floor((Math.random() * 1000000000) + 1),
-                metadata: {
-                    custom_fields: [
-                        {
-                            display_name: "Donation Type",
-                            variable_name: "donation_type",
-                            value: "platform_tip_post_campaign"
-                        },
-                        {
-                            display_name: "Linked Campaign",
-                            variable_name: "linked_campaign_id",
-                            value: campaign.id
-                        }
-                    ]
-                },
-                callback: async function (response: any) {
-                    try {
-                        // Record the successful donation
-                        const { error: donationError } = await supabase
-                            .from('donations')
-                            .insert({
-                                campaign_id: null, // Platform donation
-                                amount: amt,
-                                is_anonymous: isAnonymous,
-                                proof_of_payment_url: 'paystack_ref_' + response.reference, // Placeholder or actual ref
-                                status: 'received', // Auto-verified since it's Paystack
-                                guest_name: isAnonymous ? 'Anonymous' : `${firstName} ${lastName}`.trim(),
-                                guest_email: isAnonymous ? null : email
-                            });
-
-                        if (donationError) throw donationError;
-
-                        setStep(7); // Final Success
-                    } catch (err) {
-                        console.error("Error recording tip:", err);
-                        toastError("Error", "Donation processed but failed to record in system. Please contact support.");
-                        setStep(7); // Still show success as payment went through
-                    } finally {
-                        setSubmitting(false);
-                    }
-                },
-                onClose: function () {
-                    setSubmitting(false);
-                }
-            });
-            handler.openIframe();
-        };
-        script.onerror = () => {
-            toastError("Error", "Failed to load payment processor");
-            setSubmitting(false);
-        };
-        document.body.appendChild(script);
+        // Cast to any to avoid TS arg count error if types mismatch
+        (initializePayment as any)(onPaystackSuccess, () => setSubmitting(false));
     };
 
     return (
@@ -855,7 +874,15 @@ const CampaignDetail: React.FC = () => {
                             <div className="detail-header">
                                 <div className="header-content">
                                     <div className="student-avatar">
-                                        <User size={48} strokeWidth={1.5} />
+                                        {campaign.student.profileImage ? (
+                                            <img
+                                                src={campaign.student.profileImage}
+                                                alt={campaign.student.firstName}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        ) : (
+                                            <User size={48} strokeWidth={1.5} />
+                                        )}
                                     </div>
                                     <div className="student-info">
                                         <div className="student-name-row">

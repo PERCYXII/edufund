@@ -212,6 +212,31 @@ const CompleteProfile: React.FC = () => {
 
             if (verifyError) throw verifyError;
 
+            // --- NOTIFICATIONS ---
+            // 1. Notify Student
+            await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: 'Verification Submitted 🆔',
+                message: 'Your profile documents have been submitted for verification. We will review them shortly.',
+                type: 'verification_update'
+            });
+
+            // 2. Notify Admins
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            if (admins && admins.length > 0) {
+                const adminNotifications = admins.map(admin => ({
+                    user_id: admin.id,
+                    title: 'New Verification Request 📝',
+                    message: `Student ${formData.firstName} ${formData.lastName} has submitted verification documents.`,
+                    type: 'verification_update'
+                }));
+                await supabase.from('notifications').insert(adminNotifications);
+            }
+
             setStep(3);
 
         } catch (error: any) {

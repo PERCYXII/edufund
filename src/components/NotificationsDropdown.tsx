@@ -148,9 +148,7 @@ const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({ onClose }
             <div className="nt-footer">
                 <button className="nt-view-all" onClick={() => {
                     onClose();
-                    if (user?.role === 'admin') navigate('/admin');
-                    else if (user?.role === 'student') navigate('/dashboard');
-                    else navigate('/profile');
+                    navigate('/notifications');
                 }}>View all notifications</button>
             </div>
         </div>

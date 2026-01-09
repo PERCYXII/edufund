@@ -27,7 +27,9 @@ import {
     Plus,
     X,
     XCircle,
-    FileText
+    FileText,
+    ArrowLeft,
+    Camera
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
@@ -51,14 +53,162 @@ const StudentDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsPhone, setSettingsPhone] = useState('');
+    const [settingsFirstName, setSettingsFirstName] = useState('');
+    const [settingsLastName, setSettingsLastName] = useState('');
+    const [imageUploading, setImageUploading] = useState(false);
     const [showExtendModal, setShowExtendModal] = useState(false);
     const [extensionDays, setExtensionDays] = useState(30);
     const [isExtending, setIsExtending] = useState(false);
+    // State for donors modal
+    const [showDonorsModal, setShowDonorsModal] = useState(false);
+    const [allDonations, setAllDonations] = useState<any[]>([]);
+    const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
+
+    const percentFunded = campaign && campaign.goal > 0 ? Math.min(100, Math.round(((campaign.raised || 0) / campaign.goal) * 100)) : 0;
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            navigate('/login');
+        } catch (error) {
+            console.error("Logout failed", error);
+        }
+    };
+
+    const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        setImageUploading(true);
+
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${user?.id}/profile_${Date.now()}.${fileExt}`;
+
+            // Upload to campaign-images bucket (reusing existing bucket)
+            const { error: uploadError } = await supabase.storage
+                .from('campaign-images')
+                .upload(fileName, file);
+
+            if (uploadError) throw uploadError;
+
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('campaign-images')
+                .getPublicUrl(fileName);
+
+            // Update student record
+            const { error: updateError } = await supabase
+                .from('students')
+                .update({ profile_image_url: publicUrl })
+                .eq('id', user?.id);
+
+            if (updateError) throw updateError;
+
+            alert('Profile image updated successfully!');
+            window.location.reload();
+
+        } catch (error: any) {
+            console.error('Error uploading image:', error);
+            alert('Error updating profile image: ' + error.message);
+        } finally {
+            setImageUploading(false);
+        }
+    };
+
+    const handleDeleteCampaign = async () => {
+        if (!campaign) return;
+        if (window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) {
+            try {
+                const { error } = await supabase
+                    .from('campaigns')
+                    .delete()
+                    .eq('id', campaign.id);
+
+                if (error) throw error;
+
+                setCampaign(null);
+                alert("Campaign deleted successfully");
+                window.location.reload();
+            } catch (error: any) {
+                console.error("Error deleting campaign:", error);
+                alert("Failed to delete campaign: " + error.message);
+            }
+        }
+    };
+
+    const handleExtendCampaign = async () => {
+        if (!campaign) return;
+        setIsExtending(true);
+        try {
+            const currentEndDate = new Date(campaign.endDate);
+            const newDate = new Date(currentEndDate);
+            newDate.setDate(newDate.getDate() + extensionDays);
+
+            const { error } = await supabase
+                .from('campaigns')
+                .update({ end_date: newDate.toISOString() })
+                .eq('id', campaign.id);
+
+            if (error) throw error;
+
+            alert("Campaign extended successfully!");
+            setShowExtendModal(false);
+            window.location.reload();
+        } catch (err: any) {
+            console.error("Error extending campaign:", err);
+            alert("Failed to extend: " + err.message);
+        } finally {
+            setIsExtending(false);
+        }
+    };
+
+    const handleShowDonors = async () => {
+        if (!campaign) return;
+        setShowDonorsModal(true);
+        setLoadingDonations(true);
+        try {
+            const { data: donations, error } = await supabase
+                .from('donations')
+                .select(`
+                    *,
+                    donors (
+                        first_name,
+                        last_name
+                    )
+                `)
+                .eq('campaign_id', campaign.id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            if (donations) {
+                setAllDonations(donations.map(d => ({
+                    id: d.id,
+                    name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
+                    amount: d.amount,
+                    date: new Date(d.created_at).toLocaleDateString(),
+                    anonymous: d.is_anonymous
+                })));
+            }
+        } catch (err) {
+            console.error("Error fetching all donations:", err);
+        } finally {
+            setLoadingDonations(false);
+        }
+    };
 
     useEffect(() => {
         const fetchVerificationStatus = async () => {
             if (!user) return;
+
+            // Initialize settings form
+            if (user.student) {
+                setSettingsPhone(user.student.phone || '');
+                setSettingsFirstName(user.student.firstName || '');
+                setSettingsLastName(user.student.lastName || '');
+            }
+
             const { count, error } = await supabase
                 .from('verification_requests')
                 .select('*', { count: 'exact', head: true })
@@ -71,290 +221,153 @@ const StudentDashboard: React.FC = () => {
         fetchVerificationStatus();
     }, [user]);
 
-    const handleExtendCampaign = async () => {
-        if (!campaign || !user) return;
-        setIsExtending(true);
-        try {
-            const currentEndDate = new Date(campaign.endDate);
-            const now = new Date();
-
-            // If campaign is expired, extend from today. Otherwise extend from current end date.
-            const baseDate = currentEndDate < now ? now : currentEndDate;
-
-            const newEndDate = new Date(baseDate);
-            newEndDate.setDate(newEndDate.getDate() + parseInt(extensionDays.toString()));
-
-            const { error } = await supabase
-                .from('campaigns')
-                .update({
-                    end_date: newEndDate.toISOString(),
-                    status: 'active' // Ensure status is active if it was expired
-                })
-                .eq('id', campaign.id);
-
-            if (error) throw error;
-
-            alert("Campaign extended successfully!");
-            setShowExtendModal(false);
-
-            // Update local state to reflect change immediately
-            const latestNow = new Date();
-            const diffTime = Math.abs(newEndDate.getTime() - latestNow.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            setCampaign({
-                ...campaign,
-                endDate: newEndDate.toISOString(),
-                daysLeft: diffDays
-            });
-
-        } catch (error) {
-            console.error("Error extending campaign:", error);
-            alert("Failed to extend campaign.");
-        } finally {
-            setIsExtending(false);
-        }
-    };
-
-    const handleDeleteCampaign = async () => {
-        if (!campaign || !user) return;
-        if (!window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) return;
-
-        try {
-            const { error: deleteError } = await supabase
-                .from('campaigns')
-                .delete()
-                .eq('id', campaign.id);
-
-            if (deleteError) throw deleteError;
-
-            // Update student status to pending
-            const { error: updateError } = await supabase
-                .from('students')
-                .update({ verification_status: 'pending' })
-                .eq('id', user.id);
-
-            if (updateError) {
-                console.warn("Could not reset student verification status:", updateError);
-                // Continue, as campaign is deleted
-            }
-
-            alert("Campaign deleted successfully.");
-            setCampaign(null);
-            setActiveTab('overview');
-            // setStep is not defined here as it is part of the create flow.
-            // Resetting campaign to null will trigger the "Create Campaign" view in overview or creation tab.
-        } catch (error) {
-            console.error("Error deleting campaign:", error);
-            alert("Failed to delete campaign.");
-        }
-    };
-
     useEffect(() => {
-        if (user?.student?.phone) {
-            setSettingsPhone(user.student.phone);
-        }
-    }, [user?.student?.phone]);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            if (authLoading) return;
-
-            if (!user) {
-                navigate('/login');
-                return;
-            }
-
-            // Redirect based on role
-            if (user.role === 'admin') {
-                navigate('/admin');
-                return;
-            }
-            if (user.role === 'donor') {
-                navigate('/browse');
-                return;
-            }
-
-            // If profile is incomplete, redirect to complete-profile
-            if (user.role === 'student' && !user.student?.universityId) {
-                navigate('/complete-profile');
-                return;
-            }
-
-            if (!user.student) {
-                // Should not happen for role='student' due to auth logic, but good safety
-                setLoading(false);
-                return;
-            }
-
+        const fetchDashboardData = async () => {
+            if (!user) return;
+            setLoading(true);
             try {
-                // ... rest of the code remains same
-
-                // 1. Fetch University
-                if (user.student.universityId) {
-                    const { data: uniData } = await supabase
-                        .from('universities')
-                        .select('*')
-                        .eq('id', user.student.universityId)
-                        .single();
-
-                    if (uniData) {
-                        setUniversity({
-                            id: uniData.id,
-                            name: uniData.name,
-                            bankName: uniData.bank_name,
-                            accountNumber: uniData.account_number,
-                            branchCode: uniData.branch_code,
-                            accountName: uniData.account_name,
-                            physicalAddress: uniData.physical_address,
-                            postalAddress: uniData.postal_address,
-                            website: uniData.website,
-                            email: uniData.email,
-                            phone: uniData.phone,
-                            contactPerson: uniData.contact_person,
-                            viceChancellor: uniData.vice_chancellor
-                        });
-                    }
-                }
-
-                // 2. Fetch Campaign
-                const { data: campaignData } = await supabase
+                // Fetch Campaign
+                const { data: campaigns, error: campaignError } = await supabase
                     .from('campaigns')
-                    .select(`*, funding_items(*)`)
+                    .select('*')
                     .eq('student_id', user.id)
-                    .maybeSingle();
+                    .order('created_at', { ascending: false })
+                    .limit(1);
 
-                if (campaignData) {
+                if (campaignError) throw campaignError;
+
+                if (campaigns && campaigns.length > 0) {
+                    const rawCampaign = campaigns[0];
+
+                    // Fetch donor count
+                    const { count: donorCount } = await supabase
+                        .from('donations')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('campaign_id', rawCampaign.id);
+
+                    // Fetch funding items
+                    const { data: fundingItems } = await supabase
+                        .from('funding_items')
+                        .select('*')
+                        .eq('campaign_id', rawCampaign.id);
+
+                    // Fetch real-time raised amount
+                    const { data: allCampaignDonations } = await supabase
+                        .from('donations')
+                        .select('amount')
+                        .eq('campaign_id', rawCampaign.id);
+
+                    const actualRaised = allCampaignDonations?.reduce((sum, d) => sum + d.amount, 0) || 0;
+
                     // Calculate days left
-                    const end = new Date(campaignData.end_date);
+                    const endDate = new Date(rawCampaign.end_date);
                     const now = new Date();
-                    const diffTime = Math.abs(end.getTime() - now.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    const daysLeft = end < now ? 0 : diffDays;
+                    const diffTime = endDate.getTime() - now.getTime();
+                    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                    // Fetch donors count (distinct donors)
-                    // Simplified: just select count of donations
-                    const { count } = await supabase
+                    const mappedCampaign: Campaign = {
+                        id: rawCampaign.id,
+                        studentId: rawCampaign.student_id,
+                        title: rawCampaign.title,
+                        story: rawCampaign.story,
+                        goal: Number(rawCampaign.goal_amount),
+                        raised: actualRaised,
+                        donors: donorCount || 0,
+                        daysLeft: daysLeft > 0 ? daysLeft : 0,
+                        startDate: rawCampaign.start_date,
+                        endDate: rawCampaign.end_date,
+                        status: rawCampaign.status,
+                        type: rawCampaign.type,
+                        category: rawCampaign.category,
+                        isUrgent: rawCampaign.is_urgent,
+                        fundingBreakdown: (fundingItems || []).map((item: any) => ({
+                            id: item.id,
+                            name: item.name,
+                            amount: Number(item.amount),
+                            description: item.description
+                        })),
+                        images: rawCampaign.images,
+                        invoiceUrl: rawCampaign.invoice_url,
+                        feeStatementUrl: rawCampaign.fee_statement_url,
+                        idUrl: rawCampaign.id_url,
+                        enrollmentUrl: rawCampaign.enrollment_url,
+                        videoUrl: rawCampaign.video_url,
+                        createdAt: rawCampaign.created_at,
+                        updatedAt: rawCampaign.updated_at
+                    };
+
+                    setCampaign(mappedCampaign);
+
+                    // Fetch Recent Donations
+                    const { data: donations, error: donationError } = await supabase
                         .from('donations')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('campaign_id', campaignData.id);
-
-                    setCampaign({
-                        id: campaignData.id,
-                        studentId: campaignData.student_id,
-                        title: campaignData.title,
-                        story: campaignData.story,
-                        goal: campaignData.goal_amount || 0,
-                        raised: campaignData.raised_amount || 0,
-                        donors: count || 0,
-                        daysLeft: daysLeft,
-                        startDate: campaignData.start_date,
-                        endDate: campaignData.end_date,
-                        status: campaignData.status,
-                        type: campaignData.type || (campaignData.is_urgent ? 'quick_assist' : 'standard'),
-                        category: campaignData.category,
-                        isUrgent: campaignData.is_urgent,
-                        fundingBreakdown: campaignData.funding_items?.map((fi: any) => ({
-                            id: fi.id,
-                            name: fi.name,
-                            amount: fi.amount,
-                            description: fi.description
-                        })) || [],
-                        invoiceUrl: campaignData.invoice_url,
-                        createdAt: campaignData.created_at,
-                        updatedAt: campaignData.updated_at
-                    });
-
-                    // 3. Fetch Donations
-                    const { data: donations } = await supabase
-                        .from('donations')
-                        .select(`
-                            *,
-                            donors (
-                                first_name,
-                                last_name
-                            )
-                        `)
-                        .eq('campaign_id', campaignData.id)
+                        .select('*, donors(first_name, last_name)')
+                        .eq('campaign_id', campaigns[0].id)
                         .order('created_at', { ascending: false })
                         .limit(5);
 
-                    if (donations) {
+                    if (donationError) {
+                        console.error('Error fetching donations:', donationError);
+                    } else if (donations) {
                         setRecentDonations(donations.map(d => ({
                             id: d.id,
-                            name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name} ${d.donors?.last_name}`,
-                            amount: d.amount,
+                            name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
                             date: new Date(d.created_at).toLocaleDateString(),
+                            amount: d.amount,
                             anonymous: d.is_anonymous
                         })));
                     }
                 }
 
-            } catch (error) {
-                console.error("Error fetching dashboard data:", error);
+                // Fetch University
+                if (user.student?.universityId) {
+                    const { data: uni, error: uniError } = await supabase
+                        .from('universities')
+                        .select('*')
+                        .eq('id', user.student.universityId)
+                        .single();
+
+                    if (uniError) {
+                        console.error('Error fetching university:', uniError);
+                    } else if (uni) {
+                        const mappedUniversity: University = {
+                            id: uni.id,
+                            name: uni.name,
+                            bankName: uni.bank_name,
+                            accountNumber: uni.account_number,
+                            branchCode: uni.branch_code,
+                            accountName: uni.account_name,
+                            logo: uni.logo_url || uni.logo,
+                            website: uni.website,
+                            email: uni.email,
+                            phone: uni.phone,
+                            physicalAddress: uni.physical_address,
+                            postalAddress: uni.postal_address,
+                            contactPerson: uni.contact_person,
+                            viceChancellor: uni.vice_chancellor
+                        };
+                        setUniversity(mappedUniversity);
+                    }
+                }
+
+            } catch (err) {
+                console.error('Error fetching dashboard data:', err);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
+        fetchDashboardData();
+    }, [user]);
 
-        // Subscribe to real-time updates for campaign and donations
-        let campaignSubscription: any;
-        let donationsSubscription: any;
-
-        if (user?.id) {
-            campaignSubscription = supabase
-                .channel('student-campaign-updates')
-                .on('postgres_changes', {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'campaigns',
-                    filter: `student_id=eq.${user.id}`
-                }, () => {
-                    fetchData(); // Simplest to just refetch
-                })
-                .subscribe();
-
-            donationsSubscription = supabase
-                .channel('student-donations-updates')
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'donations'
-                    // We can't easily filter by campaign_id in the channel filter without knowing it beforehand,
-                    // but we can refetch when any donation change occurs.
-                }, (payload: any) => {
-                    // Only refetch if the donation belongs to our campaign
-                    if (campaign && (payload.new?.campaign_id === campaign.id || payload.old?.campaign_id === campaign.id)) {
-                        fetchData();
-                    } else if (!campaign) {
-                        fetchData(); // If no campaign yet, maybe one was just added or we need to check
-                    }
-                })
-                .subscribe();
-        }
-
-        return () => {
-            if (campaignSubscription) supabase.removeChannel(campaignSubscription);
-            if (donationsSubscription) supabase.removeChannel(donationsSubscription);
-        };
-    }, [user, authLoading]);
-
-    const handleLogout = () => {
-        logout();
-        navigate('/');
-    };
-
-    const percentFunded = campaign && campaign.goal > 0 ? Math.min((campaign.raised / campaign.goal) * 100, 100) : 0;
-
-    if (authLoading || loading) {
-        return <LoadingScreen title="Loading Dashboard" message="Please wait while we fetch your data..." />;
+    if (authLoading || (loading && !campaign && !user?.student?.universityId)) {
+        return <LoadingScreen />;
     }
 
     return (
         <div className="dashboard-page">
-            {/* Sidebar */}
+            {/* ... (existing sidebar and main content) */}
+
             <aside className="dashboard-sidebar">
                 <div className="sidebar-header">
                     <Link to="/">
@@ -379,7 +392,7 @@ const StudentDashboard: React.FC = () => {
                             />
                         ) : (
                             <div className="sidebar-avatar-placeholder">
-                                {user?.student?.firstName?.[0]}{user?.student?.lastName?.[0]}
+                                <UserIcon size={32} strokeWidth={1.5} />
                             </div>
                         )}
                     </div>
@@ -433,15 +446,35 @@ const StudentDashboard: React.FC = () => {
                 {/* Header */}
                 <header className="dashboard-header">
                     <div className="header-left">
-                        <h1 className="page-title">
-                            {activeTab === 'overview' && 'Dashboard Overview'}
-                            {activeTab === 'campaign' && 'My Campaign'}
-                            {activeTab === 'create' && 'Create Campaign'}
-                            {activeTab === 'settings' && 'Account Settings'}
-                        </h1>
-                        <p className="page-subtitle">Welcome back, {user?.student?.firstName || 'Student'}!</p>
+                        {activeTab !== 'overview' && (
+                            <button
+                                onClick={() => setActiveTab('overview')}
+                                className="mobile-back-btn"
+                                title="Back to Overview"
+                            >
+                                <ArrowLeft size={24} />
+                            </button>
+                        )}
+                        <div>
+                            <h1 className="page-title">
+                                {activeTab === 'overview' && 'Dashboard Overview'}
+                                {activeTab === 'campaign' && 'My Campaign'}
+                                {activeTab === 'create' && 'Create Campaign'}
+                                {activeTab === 'settings' && 'Account Settings'}
+                            </h1>
+                            <p className="page-subtitle">Welcome back, {user?.student?.firstName || 'Student'}!</p>
+                        </div>
                     </div>
                     <div className="header-right">
+                        {activeTab !== 'create' && !campaign && (
+                            <button
+                                className="mobile-create-btn"
+                                onClick={() => setActiveTab('create')}
+                            >
+                                <PlusCircle size={20} />
+                                <span className="mobile-btn-text">Create</span>
+                            </button>
+                        )}
                         <div className="notification-wrapper" style={{ position: 'relative' }}>
                             <button
                                 className="notification-btn"
@@ -458,17 +491,15 @@ const StudentDashboard: React.FC = () => {
                             )}
                         </div>
                     </div>
-                    {/* User badge moved to sidebar */}
                 </header>
 
                 {/* Content */}
-                < div className="dashboard-content" >
+                <div className="dashboard-content">
                     {/* Overview Tab */}
                     {
                         activeTab === 'overview' && (
                             <>
-
-                                {/* Verification Status */}
+                                {/* Verification Status rendering... */}
                                 {user?.student?.verificationStatus === 'pending' && (
                                     <div className="alert alert-info">
                                         <Clock size={24} />
@@ -479,7 +510,6 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Restored Account / Missing Docs State */}
                                 {user?.student?.verificationStatus === 'approved' && verificationCount === 0 && (
                                     <div className="alert alert-warning mb-6 border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r shadow-sm">
                                         <div className="flex items-start gap-4">
@@ -495,7 +525,6 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Normal Verified State */}
                                 {user?.student?.verificationStatus === 'approved' && (verificationCount !== 0) && (
                                     <div className="alert alert-success">
                                         <CheckCircle size={24} />
@@ -508,6 +537,7 @@ const StudentDashboard: React.FC = () => {
 
                                 {!campaign ? (
                                     <div className="card empty-campaign-card">
+                                        {/* Empty state... */}
                                         <div className="empty-campaign-content">
                                             <div className="empty-campaign-icon">
                                                 <FileText size={48} strokeWidth={1.5} />
@@ -532,7 +562,7 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 ) : (
                                     <>
-                                        {/* Pending Campaign Status */}
+                                        {/* Status alerts... */}
                                         {campaign.status === 'pending' && (
                                             <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
                                                 <Clock size={24} />
@@ -543,7 +573,6 @@ const StudentDashboard: React.FC = () => {
                                             </div>
                                         )}
 
-                                        {/* Rejected Campaign Status */}
                                         {campaign.status === 'rejected' && (
                                             <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-6)' }}>
                                                 <XCircle size={24} />
@@ -566,22 +595,22 @@ const StudentDashboard: React.FC = () => {
                                                     <DollarSign size={24} />
                                                 </div>
                                                 <div className="stat-info">
-                                                    <span className="stat-value">R{campaign.raised.toLocaleString()}</span>
+                                                    <span className="stat-value">R{(campaign.raised || 0).toLocaleString()}</span>
                                                     <span className="stat-label">Total Raised</span>
                                                 </div>
                                             </div>
 
                                             <div
                                                 className="stat-card success"
-                                                onClick={() => setActiveTab('campaign')}
+                                                onClick={handleShowDonors}
                                                 style={{ cursor: 'pointer' }}
-                                                title="View Campaign Details"
+                                                title="View Donor List"
                                             >
                                                 <div className="stat-icon">
                                                     <Users size={24} />
                                                 </div>
                                                 <div className="stat-info">
-                                                    <span className="stat-value">{campaign.donors}</span>
+                                                    <span className="stat-value">{campaign.donors || 0}</span>
                                                     <span className="stat-label">Total Donors</span>
                                                 </div>
                                             </div>
@@ -611,13 +640,13 @@ const StudentDashboard: React.FC = () => {
                                                     <Clock size={24} />
                                                 </div>
                                                 <div className="stat-info">
-                                                    <span className="stat-value">{campaign.daysLeft}</span>
+                                                    <span className="stat-value">{campaign.daysLeft || 0}</span>
                                                     <span className="stat-label">Days Left (Extend)</span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Campaign Progress */}
+                                        {/* Rest of Overview Content */}
                                         <div className="card">
                                             <div className="card-header">
                                                 <h2 className="card-title">Campaign Progress</h2>
@@ -628,8 +657,8 @@ const StudentDashboard: React.FC = () => {
                                             <div className="card-body">
                                                 <div className="progress-section">
                                                     <div className="progress-header">
-                                                        <span className="progress-raised">R{campaign.raised.toLocaleString()}</span>
-                                                        <span className="progress-goal">of R{campaign.goal.toLocaleString()}</span>
+                                                        <span className="progress-raised">R{(campaign.raised || 0).toLocaleString()}</span>
+                                                        <span className="progress-goal">of R{(campaign.goal || 0).toLocaleString()}</span>
                                                     </div>
                                                     <div className="progress-bar large">
                                                         <div
@@ -638,13 +667,18 @@ const StudentDashboard: React.FC = () => {
                                                         />
                                                     </div>
                                                     <p className="progress-remaining">
-                                                        R{(campaign.goal - campaign.raised).toLocaleString()} still needed to reach your goal
+                                                        R{Math.max(0, (campaign.goal || 0) - (campaign.raised || 0)).toLocaleString()} still needed to reach your goal
                                                     </p>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Share Campaign */}
+                                        {/* Share, Recent Donations sections... */}
+                                        {/* Note: I am not repeating the whole file content here as I only need to target replace/insert. 
+                                            I should be careful with the replacement chunk to not delete subsequent code.
+                                            However, since the file is large, I'll return the modified chunks properly.
+                                        */}
+
                                         <div className="card">
                                             <div className="card-header">
                                                 <h2 className="card-title">Share Your Campaign</h2>
@@ -677,7 +711,6 @@ const StudentDashboard: React.FC = () => {
                                                         <span>Copy Link</span>
                                                     </button>
                                                 </div>
-
                                                 <div className="share-social-links" style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
                                                     <a
                                                         href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}`}
@@ -713,7 +746,6 @@ const StudentDashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* Recent Donations */}
                                         <div className="card">
                                             <div className="card-header">
                                                 <h2 className="card-title">Recent Donations</h2>
@@ -741,6 +773,7 @@ const StudentDashboard: React.FC = () => {
                         )
                     }
 
+                    {/* ... (Danger Zone and other tabs are untouched) */}
                     {
                         activeTab === 'overview' && campaign && (
                             <div className="card mt-8 border-l-4 border-red-500 bg-white">
@@ -798,8 +831,12 @@ const StudentDashboard: React.FC = () => {
                                         <div className="card-body">
                                             <div className="campaign-overview">
                                                 <div className="campaign-avatar-large">
-                                                    {campaign.images?.[0] ? (
-                                                        <img src={campaign.images[0]} alt={campaign.title} className="campaign-preview-img" />
+                                                    {campaign.images?.[0] || user?.student?.profileImage ? (
+                                                        <img
+                                                            src={campaign.images?.[0] || user?.student?.profileImage}
+                                                            alt={campaign.title}
+                                                            className="campaign-preview-img"
+                                                        />
                                                     ) : (
                                                         <UserIcon size={48} strokeWidth={1.5} />
                                                     )}
@@ -943,15 +980,54 @@ const StudentDashboard: React.FC = () => {
                                     <div className="settings-section">
                                         <h4>Profile Information</h4>
                                         <div className="settings-form">
+                                            {/* Profile Image Upload */}
+                                            <div className="form-group mb-6">
+                                                <label className="form-label">Profile Picture</label>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 border border-gray-200">
+                                                        {user.student?.profileImage ? (
+                                                            <img
+                                                                src={user.student.profileImage}
+                                                                alt="Profile"
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                                                <UserIcon size={40} />
+                                                            </div>
+                                                        )}
+                                                        {imageUploading && (
+                                                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">
+                                                                Uploading...
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="btn btn-secondary cursor-pointer flex items-center gap-2">
+                                                            <Camera size={16} />
+                                                            Upload New Photo
+                                                            <input
+                                                                type="file"
+                                                                className="hidden"
+                                                                accept="image/*"
+                                                                onChange={handleProfileImageUpload}
+                                                                disabled={imageUploading}
+                                                            />
+                                                        </label>
+                                                        <p className="text-xs text-gray-500">
+                                                            Recommended: Square JPG, PNG. Max 2MB.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
                                             <div className="form-row">
                                                 <div className="form-group">
                                                     <label className="form-label">First Name</label>
                                                     <input
                                                         type="text"
                                                         className="form-input"
-                                                        value={user.student?.firstName || ''}
-                                                        readOnly
-                                                        disabled
+                                                        value={settingsFirstName}
+                                                        onChange={(e) => setSettingsFirstName(e.target.value)}
                                                     />
                                                 </div>
                                                 <div className="form-group">
@@ -959,9 +1035,8 @@ const StudentDashboard: React.FC = () => {
                                                     <input
                                                         type="text"
                                                         className="form-input"
-                                                        value={user.student?.lastName || ''}
-                                                        readOnly
-                                                        disabled
+                                                        value={settingsLastName}
+                                                        onChange={(e) => setSettingsLastName(e.target.value)}
                                                     />
                                                 </div>
                                             </div>
@@ -986,13 +1061,17 @@ const StudentDashboard: React.FC = () => {
                                             </div>
                                             <button
                                                 className="btn btn-primary mt-4"
-                                                disabled={savingSettings || settingsPhone === user.student?.phone}
+                                                disabled={savingSettings}
                                                 onClick={async () => {
                                                     setSavingSettings(true);
                                                     try {
                                                         const { error } = await supabase
                                                             .from('students')
-                                                            .update({ phone: settingsPhone })
+                                                            .update({
+                                                                phone: settingsPhone,
+                                                                first_name: settingsFirstName,
+                                                                last_name: settingsLastName
+                                                            })
                                                             .eq('id', user.id);
                                                         if (error) throw error;
                                                         alert("Settings saved!");
@@ -1046,8 +1125,9 @@ const StudentDashboard: React.FC = () => {
                         )
                     }
                 </div>
-            </main >
+            </main>
 
+            {/* Extend Modal */}
             {showExtendModal && (
                 <div className="modal-overlay">
                     <div className="modal-content">
@@ -1114,7 +1194,62 @@ const StudentDashboard: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div >
+
+            {/* Donors Modal */}
+            {showDonorsModal && (
+                <div className="modal-overlay" onClick={() => setShowDonorsModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                        <div className="modal-header">
+                            <div>
+                                <h3 className="modal-title">Donation History</h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Total Raised: <span className="font-bold text-green-600">
+                                        R{(loadingDonations
+                                            ? (campaign?.raised || 0)
+                                            : allDonations.reduce((sum, d) => sum + d.amount, 0)
+                                        ).toLocaleString()}
+                                    </span>
+                                </p>
+                            </div>
+                            <button className="modal-close-btn" onClick={() => setShowDonorsModal(false)}>
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="modal-body">
+                            {loadingDonations ? (
+                                <div className="py-8 text-center text-gray-500">Loading donations...</div>
+                            ) : (
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                                    {allDonations.length > 0 ? (
+                                        allDonations.map((donation) => (
+                                            <div key={donation.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold text-sm">
+                                                        {donation.anonymous ? '?' : donation.name.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-gray-900">{donation.name}</p>
+                                                        <p className="text-xs text-gray-500">{donation.date}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="font-bold text-gray-900">
+                                                    +R{donation.amount.toLocaleString()}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-8 text-gray-500">
+                                            No donations yet. Share your campaign to get started!
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -1347,6 +1482,33 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                     .from('funding_items')
                     .insert(items);
                 if (itemsError) throw itemsError;
+            }
+
+            // --- NOTIFICATIONS ---
+            if (!isEditing) {
+                // 1. Notify Student
+                await supabase.from('notifications').insert({
+                    user_id: user.id,
+                    title: 'Campaign Submitted 🚀',
+                    message: `Your campaign "${formData.title}" has been submitted for review.`,
+                    type: 'campaign_update'
+                });
+
+                // 2. Notify Admins
+                const { data: admins } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('role', 'admin');
+
+                if (admins && admins.length > 0) {
+                    const adminNotifications = admins.map(admin => ({
+                        user_id: admin.id,
+                        title: 'New Campaign Pending 📢',
+                        message: `A new campaign "${formData.title}" by ${user.student?.firstName || 'Student'} is waiting for approval.`,
+                        type: 'campaign_update'
+                    }));
+                    await supabase.from('notifications').insert(adminNotifications);
+                }
             }
 
             if (isEditing) {

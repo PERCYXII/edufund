@@ -67,6 +67,7 @@
     justify-content: center;
     font-size: 3rem;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .student-info {

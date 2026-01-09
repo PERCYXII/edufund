@@ -199,6 +199,37 @@
     }
 }
 
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.mobile-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    background: white;
+    border: 1px solid var(--color-gray-200);
+    color: var(--color-gray-600);
+    margin-right: var(--spacing-3);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.mobile-back-btn:hover {
+    background: var(--color-gray-100);
+    color: var(--color-primary-600);
+}
+
+@media (min-width: 1024px) {
+    .mobile-back-btn {
+        display: none;
+    }
+}
+
 .page-title {
     font-size: var(--font-size-2xl);
     font-weight: 700;
@@ -234,6 +265,42 @@
     height: 8px;
     background: var(--color-error-500);
     border-radius: var(--radius-full);
+}
+
+.mobile-create-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    background: var(--color-primary-600);
+    color: white;
+    border: none;
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: background var(--transition-fast);
+}
+
+.mobile-create-btn:hover {
+    background: var(--color-primary-700);
+}
+
+@media (min-width: 1024px) {
+    .mobile-create-btn {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .mobile-btn-text {
+        display: none;
+    }
+
+    .mobile-create-btn {
+        padding: var(--spacing-2);
+    }
 }
 
 .notification-dropdown {
@@ -642,9 +709,12 @@
 }
 
 .campaign-avatar-large {
-    width: 100px;
-    height: 100px;
-    background: var(--gradient-primary);
+    width: 80px;
+    height: 80px;
+    background: white;
+    /* Changed from gradient-primary to white as request/fix */
+    border: 1px solid var(--color-gray-200);
+    /* Added border for definition */
     border-radius: var(--radius-xl);
     display: flex;
     align-items: center;
@@ -652,6 +722,8 @@
     font-size: 3rem;
     flex-shrink: 0;
     overflow: hidden;
+    color: var(--color-gray-400);
+    /* Ensure icon is visible if no image */
 }
 
 .campaign-preview-img {

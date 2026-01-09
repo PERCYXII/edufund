@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import AdminReports from '../components/AdminReports';
+import AdminSettings from '../components/AdminSettings';
 import { useNavigate, Link } from 'react-router-dom';
 import {
     Home,
@@ -9,7 +11,7 @@ import {
     BarChart3,
     Settings,
     Bell,
-    Clock,
+
     FileText,
     CheckCircle,
     XCircle,
@@ -22,7 +24,8 @@ import {
     Archive,
     RotateCcw,
     LayoutDashboard,
-    ShieldCheck
+    ShieldCheck,
+    ArrowLeft
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -60,6 +63,7 @@ const AdminDashboard: React.FC = () => {
     const [recentCampaigns, setRecentCampaigns] = useState<CampaignWithStudent[]>([]);
     const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([]);
     const [pendingDonations, setPendingDonations] = useState<any[]>([]);
+    const [allTransactions, setAllTransactions] = useState<any[]>([]); // New state for transactions tab
     const [universities, setUniversities] = useState<University[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [disabledProfiles, setDisabledProfiles] = useState<any[]>([]);
@@ -404,7 +408,35 @@ const AdminDashboard: React.FC = () => {
 
             const activeCampaignsData = campaignStats?.filter(c => c.status === 'active') || [];
             const pendingCampaignsData = campaignStats?.filter(c => c.status === 'pending') || [];
-            const totalFunded = activeCampaignsData.reduce((sum, c) => sum + (c.raised_amount || 0), 0);
+
+            // USE RPC for proper total calculation
+            const { data: totalRaisedData, error: rpcError } = await supabase.rpc('get_total_donations');
+            let totalFunded = 0;
+            if (!rpcError && totalRaisedData !== null) {
+                totalFunded = totalRaisedData;
+            } else {
+                // Fallback
+                const { data: donations } = await supabase.from('donations').select('amount');
+                totalFunded = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+            }
+
+            // 8. Fetch All Transactions for History Tab
+            const { data: allTrans } = await supabase
+                .from('donations')
+                .select(`
+                    *,
+                    campaign:campaigns (
+                        title,
+                        type,
+                        student:students (
+                            first_name, last_name, student_number,
+                            university:universities (name)
+                        )
+                    )
+                `)
+                .order('created_at', { ascending: false });
+
+            if (allTrans) setAllTransactions(allTrans);
 
             setStats({
                 // Stats
@@ -1005,16 +1037,29 @@ const AdminDashboard: React.FC = () => {
                 {/* Header */}
                 <header className="admin-header">
                     <div className="admin-header-left">
-                        <h1 className="admin-page-title">
-                            {activeTab === 'dashboard' && 'Admin Dashboard'}
-                            {activeTab === 'verifications' && 'Pending Student Verifications'}
-                            {activeTab === 'students' && 'Manage Students'}
-                            {activeTab === 'universities' && 'Partner Universities'}
-                            {activeTab === 'transactions' && 'Transaction History'}
-                            {activeTab === 'reports' && 'Platform Reports'}
-                            {activeTab === 'settings' && 'Admin Settings'}
-                        </h1>
-                        <p className="admin-page-subtitle">Manage student verifications and platform operations</p>
+                        {activeTab !== 'dashboard' && (
+                            <button
+                                onClick={() => setActiveTab('dashboard')}
+                                className="mobile-back-btn"
+                                title="Back to Dashboard"
+                            >
+                                <ArrowLeft size={24} />
+                            </button>
+                        )}
+                        <div>
+                            <h1 className="admin-page-title">
+                                {activeTab === 'dashboard' && 'Admin Dashboard'}
+                                {activeTab === 'verifications' && 'Pending Student Verifications'}
+                                {activeTab === 'donations' && 'Pending Donations'}
+                                {activeTab === 'students' && 'Manage Students'}
+                                {activeTab === 'universities' && 'Partner Universities'}
+                                {activeTab === 'transactions' && 'Transaction History'}
+                                {activeTab === 'reports' && 'Platform Reports'}
+                                {activeTab === 'settings' && 'Admin Settings'}
+                                {activeTab === 'archive' && 'Archived Users'}
+                            </h1>
+                            <p className="admin-page-subtitle">Manage student verifications and platform operations</p>
+                        </div>
                     </div>
                     <div className="admin-header-right">
                         <button
@@ -1051,54 +1096,60 @@ const AdminDashboard: React.FC = () => {
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <div className="admin-stat-icon">
-                                        <Clock size={24} />
+                                        <ShieldCheck size={24} />
                                     </div>
                                     <div className="admin-stat-info">
                                         <span className="admin-stat-value">{stats.pendingVerifications}</span>
                                         <span className="admin-stat-label">Pending Verifications</span>
                                     </div>
-                                    <span className="admin-stat-tag">Today</span>
+                                    <span className="admin-stat-tag">Action Needed</span>
                                 </div>
 
                                 <div
                                     className="admin-stat-card primary clickable"
-                                    onClick={() => setActiveTab('students')}
+                                    onClick={() => setActiveTab('verifications')}
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <div className="admin-stat-icon">
                                         <GraduationCap size={24} />
                                     </div>
                                     <div className="admin-stat-info">
-                                        <span className="admin-stat-value">{stats.activeCampaigns}</span>
-                                        <span className="admin-stat-label">Active Campaigns</span>
+                                        <span className="admin-stat-value">{pendingCampaigns.length}</span>
+                                        <span className="admin-stat-label">Pending Campaigns</span>
                                     </div>
+                                    <span className="admin-stat-tag">To Review</span>
                                 </div>
 
                                 <div
                                     className="admin-stat-card success clickable"
-                                    onClick={() => setActiveTab('transactions')}
+                                    onClick={() => setActiveTab('donations')}
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <div className="admin-stat-icon">
                                         <DollarSign size={24} />
                                     </div>
                                     <div className="admin-stat-info">
-                                        <span className="admin-stat-value">R{(stats.totalFunded / 1000000).toFixed(1)}M</span>
-                                        <span className="admin-stat-label">Total Donations</span>
+                                        <span className="admin-stat-value">{pendingDonations.length}</span>
+                                        <span className="admin-stat-label">Pending Donations</span>
                                     </div>
+                                    <span className="admin-stat-tag">Verify Payment</span>
                                 </div>
 
                                 <div
                                     className="admin-stat-card info clickable"
-                                    onClick={() => setActiveTab('universities')}
+                                    onClick={() => setActiveTab('transactions')}
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <div className="admin-stat-icon">
-                                        <Building size={24} />
+                                        <BarChart3 size={24} />
                                     </div>
                                     <div className="admin-stat-info">
-                                        <span className="admin-stat-value">{stats.totalUniversities}</span>
-                                        <span className="admin-stat-label">Universities</span>
+                                        <span className="admin-stat-value">
+                                            R{stats.totalFunded > 1000000
+                                                ? (stats.totalFunded / 1000000).toFixed(1) + 'M'
+                                                : stats.totalFunded.toLocaleString()}
+                                        </span>
+                                        <span className="admin-stat-label">Total Raised</span>
                                     </div>
                                 </div>
                             </div>
@@ -1882,12 +1933,77 @@ const AdminDashboard: React.FC = () => {
                     )}
 
                     {/* Other Tabs - Placeholder */}
-                    {(activeTab === 'transactions' || activeTab === 'reports' || activeTab === 'settings') && (
-                        <div className="empty-state">
-                            <BarChart3 size={48} className="empty-icon" />
-                            <h3>Coming Soon</h3>
-                            <p>This section is under development.</p>
+                    {/* Transactions Tab */}
+                    {activeTab === 'transactions' && (
+                        <div className="admin-section">
+                            <div className="admin-table-wrapper">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Donor</th>
+                                            <th>Details</th>
+                                            <th>Amount</th>
+                                            <th>Reference</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {allTransactions.map((tx) => (
+                                            <tr key={tx.id}>
+                                                <td>{new Date(tx.created_at).toLocaleDateString()} <span className="text-gray-400 text-xs">{new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></td>
+                                                <td>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-gray-900">{tx.guest_name || 'Anonymous'}</span>
+                                                        <span className="text-xs text-gray-500">{tx.guest_email || 'No email'}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {tx.campaign ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-medium">Campaign Donation</span>
+                                                            <span className="text-xs text-gray-500">To: {tx.campaign.student?.first_name} ({tx.campaign.title})</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-medium text-primary-600">Platform Support</span>
+                                                            <span className="text-xs text-gray-500">Direct Donation</span>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="font-bold text-gray-900">R{tx.amount.toLocaleString()}</td>
+                                                <td className="mono text-xs">{tx.payment_reference || '-'}</td>
+                                                <td>
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${tx.status === 'received' ? 'bg-green-100 text-green-800' :
+                                                        tx.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                                        }`}>
+                                                        {tx.status === 'received' ? 'Completed' : tx.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {allTransactions.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="text-center py-8 text-gray-500">
+                                                    No transactions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
+                    )}
+
+
+                    {/* Reports Tab */}
+                    {activeTab === 'reports' && (
+                        <AdminReports transactions={allTransactions} stats={stats} />
+                    )}
+
+                    {/* Settings Tab */}
+                    {activeTab === 'settings' && (
+                        <AdminSettings />
                     )}
                 </div>
             </main>

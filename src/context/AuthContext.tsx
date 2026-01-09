@@ -190,12 +190,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useEffect(() => {
         if (!user) return;
 
-        // Fetch existing
+        // Fetch existing (with 3-day retention)
         const fetchNotifications = async () => {
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
+            // 1. Cleanup old notifications
+            await supabase
+                .from('notifications')
+                .delete()
+                .eq('user_id', user.id)
+                .lt('created_at', threeDaysAgo);
+
+            // 2. Fetch recent
             const { data } = await supabase
                 .from('notifications')
                 .select('*')
                 .eq('user_id', user.id)
+                .gte('created_at', threeDaysAgo)
                 .order('created_at', { ascending: false });
 
             if (data) {

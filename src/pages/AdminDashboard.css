@@ -331,6 +331,37 @@
     }
 }
 
+.admin-header-left {
+    display: flex;
+    align-items: center;
+}
+
+.mobile-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    background: white;
+    border: 1px solid var(--color-gray-200);
+    color: var(--color-gray-600);
+    margin-right: var(--spacing-3);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.mobile-back-btn:hover {
+    background: var(--color-gray-100);
+    color: var(--color-primary-600);
+}
+
+@media (min-width: 1024px) {
+    .mobile-back-btn {
+        display: none;
+    }
+}
+
 .admin-page-title {
     font-size: var(--font-size-2xl);
     font-weight: 700;

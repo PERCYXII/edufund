@@ -45,22 +45,14 @@ const Navbar: React.FC = () => {
         setMobileMenuOpen(false);
     };
 
-    const getInitials = () => {
-        if (user?.student) {
-            return `${user.student.firstName[0]}${user.student.lastName[0]}`;
-        }
-        if (user?.role === 'admin') {
-            return 'AD';
-        }
-        return 'U';
-    };
+
 
     const renderAvatarContent = () => {
         const profileImage = user?.student?.profileImage;
         if (profileImage) {
             return <img src={profileImage} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />;
         }
-        return getInitials();
+        return <User size={userMenuOpen ? 24 : 18} />;
     };
 
     const getDashboardLink = () => {

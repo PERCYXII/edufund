@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -19,22 +20,48 @@ import { CampaignCardSkeleton } from '../components/Skeleton';
 import PlatformDonationButton from '../components/PlatformDonationButton';
 import './Landing.css';
 
-// University campus images for hero carousel
-const heroImages = [
-    '/images/uct-campus.png',
-    '/images/wits-campus.png',
-    '/images/stellenbosch-campus.png',
-    '/images/up-campus.png',
-    '/images/uj-campus.png',
-    '/images/tut-campus.png',
-];
+
 
 import { useAuth } from '../context/AuthContext'; // Import Auth
 
-// ... existing imports
+const CountUp = ({ end, duration = 2000 }: { end: number, duration?: number }) => {
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+        let startTime: number | null = null;
+        let animationFrameId: number;
+
+        const animate = (timestamp: number) => {
+            if (!startTime) startTime = timestamp;
+            const progress = timestamp - startTime;
+            const percentage = Math.min(progress / duration, 1);
+
+            // Ease out quart
+            const ease = 1 - Math.pow(1 - percentage, 4);
+
+            setCount(Math.floor(ease * end));
+
+            if (progress < duration) {
+                animationFrameId = requestAnimationFrame(animate);
+            } else {
+                setCount(end);
+            }
+        };
+
+        animationFrameId = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [end, duration]);
+
+    return <>{count}</>;
+};
 
 const Landing: React.FC = () => {
     const { isLoggedIn } = useAuth(); // Get auth state
+    // navigate removed as unused
+
+    // Add refresh trigger
+    const [refreshKey, setRefreshKey] = useState(0);
+
     const [featuredCampaigns, setFeaturedCampaigns] = useState<CampaignWithStudent[]>([]);
     const [stats, setStats] = useState({
         totalFunded: 0,
@@ -43,6 +70,11 @@ const Landing: React.FC = () => {
         partnerUniversities: 0,
     });
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [heroImages] = useState([
+        '/images/hero-bg-1.jpg',
+        '/images/hero-bg-2.jpg',
+        '/images/hero-bg-3.jpg'
+    ]);
     const location = useLocation();
 
     const urgentCount = featuredCampaigns.filter(c => c.isUrgent).length; // Based on fetched
@@ -53,7 +85,7 @@ const Landing: React.FC = () => {
             setCurrentImageIndex((prev) => (prev + 1) % heroImages.length);
         }, 5000); // Change every 5 seconds
         return () => clearInterval(interval);
-    }, []);
+    }, [heroImages.length]);
 
     // Handle scroll to section from navigation state
     useEffect(() => {
@@ -80,10 +112,11 @@ const Landing: React.FC = () => {
                         *,
                         student:students (
                             *,
-                            university:universities (*)
+                            university:universities(*)
                         )
                     `)
                     .eq('status', 'active')
+                    .order('is_urgent', { ascending: false }) // Urgent first
                     .order('created_at', { ascending: false })
                     .limit(3);
 
@@ -98,7 +131,7 @@ const Landing: React.FC = () => {
                         donors: c.donors || 0,
                         daysLeft: 30, // calculated below
                         startDate: c.start_date,
-                        endDate: c.end_date,
+                        endDate: c.end_date, // Keep endDate for consistency with type
                         status: c.status,
                         type: c.type || (c.is_urgent ? 'quick_assist' : 'standard'),
                         category: c.category,
@@ -133,9 +166,9 @@ const Landing: React.FC = () => {
                         }
                     }));
 
-                    // Recalculate daysLeft
+                    // Recalculate daysLeft using endDate
                     const withDays = mapped.map(c => {
-                        const end = new Date(c.endDate);
+                        const end = new Date(c.endDate); // Use endDate as per type definition
                         const now = new Date();
                         const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                         return { ...c, daysLeft: diff > 0 ? diff : 0 };
@@ -147,20 +180,29 @@ const Landing: React.FC = () => {
                 // 2. Fetch Stats (Approximations)
                 // Universities count
                 const { count: uniCount } = await supabase.from('universities').select('*', { count: 'exact', head: true });
-                // Donors count
-                const { count: donorCount } = await supabase.from('donors').select('*', { count: 'exact', head: true });
+                // Donors count - using RPC for accuracy (unique emails)
+                const { data: donorCountData, error: donorRpcError } = await supabase.rpc('get_total_unique_donors');
+                const realDonorCount = (!donorRpcError && donorCountData !== null) ? donorCountData : 0;
+
                 // Students count (active campaigns)
                 const { count: studentCount } = await supabase.from('campaigns').select('*', { count: 'exact', head: true });
 
-                // Total funded - aggregate query (requires RPC or client side calc of all donations - expensive)
-                // For now, let's sum up the random active campaigns or just use a placeholder base + dynamic
-                const { data: donations } = await supabase.from('donations').select('amount').limit(100);
-                const totalRaised = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+                // Total funded - using RPC for accuracy
+                const { data: totalRaisedData, error: rpcError } = await supabase.rpc('get_total_donations');
+
+                let totalRaised = 0;
+                if (!rpcError && totalRaisedData !== null) {
+                    totalRaised = totalRaisedData;
+                } else {
+                    // Fallback to manual sum if RPC fails
+                    const { data: donations } = await supabase.from('donations').select('amount').limit(100);
+                    totalRaised = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+                }
 
                 setStats({
-                    totalFunded: totalRaised > 0 ? totalRaised : 2500000, // Placeholder if 0
+                    totalFunded: totalRaised,
                     studentsHelped: studentCount || 850,
-                    totalDonors: donorCount || 12000,
+                    totalDonors: realDonorCount,
                     partnerUniversities: uniCount || 26
                 });
 
@@ -170,7 +212,12 @@ const Landing: React.FC = () => {
         };
 
         fetchData();
-    }, []);
+    }, [refreshKey]); // Re-fetch when refreshKey changes
+
+    const handleDonationSuccess = () => {
+        // Trigger re-fetch of stats
+        setRefreshKey(prev => prev + 1);
+    };
 
     return (
         <div className="landing-page">
@@ -211,7 +258,10 @@ const Landing: React.FC = () => {
                                 </Link>
                             </div>
                             <div className="hero-donate-cta">
-                                <PlatformDonationButton className="btn btn-lg hero-btn-donate" />
+                                <PlatformDonationButton
+                                    className="btn btn-lg hero-btn-donate"
+                                    onDonationSuccess={handleDonationSuccess}
+                                />
                                 <span className="donate-note">Help us keep the platform running</span>
                             </div>
                         </div>
@@ -226,7 +276,11 @@ const Landing: React.FC = () => {
                     {/* Stats */}
                     <div className="hero-stats">
                         <div className="stat-card">
-                            <span className="stat-value">R{(stats.totalFunded / 1000000).toFixed(1)}M+</span>
+                            <span className="stat-value">
+                                R{stats.totalFunded > 1000000
+                                    ? (stats.totalFunded / 1000000).toFixed(1) + 'M+'
+                                    : stats.totalFunded.toLocaleString() + '+'}
+                            </span>
                             <span className="stat-label">Funded to Date</span>
                         </div>
                         <div className="stat-card">
@@ -234,7 +288,7 @@ const Landing: React.FC = () => {
                             <span className="stat-label">Students Helped</span>
                         </div>
                         <div className="stat-card">
-                            <span className="stat-value">{stats.totalDonors.toLocaleString()}+</span>
+                            <span className="stat-value"><CountUp end={stats.totalDonors} /></span>
                             <span className="stat-label">Generous Donors</span>
                         </div>
                         <div className="stat-card">
@@ -502,10 +556,10 @@ const Landing: React.FC = () => {
                                     <span>Reach more donors</span>
                                 </div>
                             </div>
-                            <button className="btn btn-lg support-btn">
-                                <Heart size={20} />
-                                Donate to UniFund
-                            </button>
+                            <PlatformDonationButton
+                                className="btn btn-lg support-btn"
+                                onDonationSuccess={handleDonationSuccess}
+                            />
                             <p className="support-note">Every contribution helps us help more students</p>
                         </div>
                     </div>
