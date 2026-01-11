@@ -30,7 +30,8 @@ import {
     FileText,
     ArrowLeft,
     Camera,
-    Menu
+    Menu,
+    ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
@@ -70,6 +71,14 @@ const StudentDashboard: React.FC = () => {
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneFile, setMilestoneFile] = useState<File | null>(null);
     const [uploadingMilestone, setUploadingMilestone] = useState(false);
+
+    // Verification state
+    const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+    const [verificationFormData, setVerificationFormData] = useState({
+        idDocument: null as File | null,
+        enrollmentDocument: null as File | null,
+        feeStatement: null as File | null
+    });
 
     const percentFunded = campaign && campaign.goal > 0 ? Math.min(100, Math.round(((campaign.raised || 0) / campaign.goal) * 100)) : 0;
 
@@ -452,6 +461,71 @@ const StudentDashboard: React.FC = () => {
         return <LoadingScreen />;
     }
 
+    const handleVerificationSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVerificationSubmitting(true);
+        try {
+            const files = {
+                id: verificationFormData.idDocument,
+                enrollment: verificationFormData.enrollmentDocument,
+                feeStatement: verificationFormData.feeStatement
+            };
+
+            for (const [type, file] of Object.entries(files)) {
+                if (file) {
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `verification/${user?.id}/${type}_${Date.now()}.${fileExt}`;
+
+                    const { error: uploadError, data } = await supabase.storage
+                        .from('documents')
+                        .upload(fileName, file);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('documents')
+                        .getPublicUrl(data.path);
+
+                    await supabase.from('verification_requests').insert({
+                        student_id: user?.id,
+                        document_type: type,
+                        document_url: publicUrl,
+                        status: 'pending'
+                    });
+                }
+            }
+
+            await supabase
+                .from('students')
+                .update({ verification_status: 'pending' })
+                .eq('id', user?.id);
+
+            // Notify Admins
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            if (admins && admins.length > 0) {
+                const notifs = admins.map(admin => ({
+                    user_id: admin.id,
+                    title: 'New Verification Request 🛡️',
+                    message: `${user?.student?.firstName || 'Student'} has submitted profile verification documents.`,
+                    type: 'info'
+                }));
+                await supabase.from('notifications').insert(notifs);
+            }
+
+            alert("Verification documents submitted successfully!");
+            window.location.reload();
+        } catch (error: any) {
+            console.error("Verification submit error:", error);
+            alert("Failed to submit verification: " + error.message);
+        } finally {
+            setVerificationSubmitting(false);
+        }
+    };
+
     return (
         <div className="dashboard-page">
             {/* ... (existing sidebar and main content) */}
@@ -527,6 +601,13 @@ const StudentDashboard: React.FC = () => {
                         <Settings size={20} />
                         Settings
                     </button>
+                    <button
+                        className={`nav-item ${activeTab === 'verification' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('verification')}
+                    >
+                        <ShieldCheck size={20} />
+                        Verification
+                    </button>
                 </nav>
 
                 <div className="sidebar-footer">
@@ -598,6 +679,129 @@ const StudentDashboard: React.FC = () => {
 
                 {/* Content */}
                 <div className="dashboard-content">
+                    {/* Verification Tab */}
+                    {activeTab === 'verification' && (
+                        <div className="card">
+                            <div className="card-header border-b border-gray-100 p-6">
+                                <h3 className="text-xl font-bold text-gray-900">Profile Verification</h3>
+                            </div>
+                            <div className="card-body p-6">
+                                {user?.student?.verificationStatus === 'approved' ? (
+                                    <div className="text-center py-12">
+                                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 text-green-600 mb-6">
+                                            <CheckCircle size={40} />
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-gray-900 mb-2">You are Verified!</h3>
+                                        <p className="text-gray-600 max-w-md mx-auto">
+                                            Your student profile is fully verified. Verified profiles receive significantly more trust and donations from the community.
+                                        </p>
+                                    </div>
+                                ) : user?.student?.verificationStatus === 'pending' ? (
+                                    <div className="text-center py-12">
+                                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 text-amber-600 mb-6">
+                                            <Clock size={40} />
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Verification Pending</h3>
+                                        <p className="text-gray-600 max-w-md mx-auto">
+                                            We are currently reviewing your documents. This process usually takes 24-48 hours. You will be notified via email once approved.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <form onSubmit={handleVerificationSubmit} className="space-y-8">
+                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                                            <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-lg">
+                                                <AlertCircle size={20} />
+                                                Verified Student Advantage
+                                            </h4>
+                                            <p className="text-blue-800">
+                                                Donors are most likely to fund students who have verified their enrollment status.
+                                                By uploading your documents, you unlock the full potential of EduFund.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="form-group space-y-2">
+                                                <label className="form-label font-medium text-gray-700">ID Document / Passport *</label>
+                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
+                                                    <input
+                                                        type="file"
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        required
+                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, idDocument: e.target.files?.[0] || null }))}
+                                                    />
+                                                    <div className="flex flex-col items-center">
+                                                        <FileText size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
+                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
+                                                            {verificationFormData.idDocument ? verificationFormData.idDocument.name : 'Click to Upload ID'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500 mt-1">PDF, JPG or PNG</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="form-group space-y-2">
+                                                <label className="form-label font-medium text-gray-700">Proof of Enrollment *</label>
+                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
+                                                    <input
+                                                        type="file"
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        required
+                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, enrollmentDocument: e.target.files?.[0] || null }))}
+                                                    />
+                                                    <div className="flex flex-col items-center">
+                                                        <GraduationCap size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
+                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
+                                                            {verificationFormData.enrollmentDocument ? verificationFormData.enrollmentDocument.name : 'Click to Upload Proof'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500 mt-1">Official University Letterhead</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="form-group space-y-2 md:col-span-2">
+                                                <label className="form-label font-medium text-gray-700">Fee Statement (Optional)</label>
+                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
+                                                    <input
+                                                        type="file"
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, feeStatement: e.target.files?.[0] || null }))}
+                                                    />
+                                                    <div className="flex flex-col items-center">
+                                                        <DollarSign size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
+                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
+                                                            {verificationFormData.feeStatement ? verificationFormData.feeStatement.name : 'Click to Upload Fee Statement'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500 mt-1">Latest Financial Statement</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-4 border-t border-gray-100 flex justify-end">
+                                            <button
+                                                type="submit"
+                                                className="btn btn-primary px-8 py-3 rounded-lg font-semibold shadow-lg shadow-primary-200 hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                                disabled={verificationSubmitting}
+                                            >
+                                                {verificationSubmitting ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                        Uploading...
+                                                    </div>
+                                                ) : (
+                                                    'Submit Verification Documents'
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Overview Tab */}
                     {
                         activeTab === 'overview' && (
@@ -1714,7 +1918,9 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
 
     return (
         <>
-            {/* Progress */}
+
+
+
             <div className="campaign-steps">
                 {step > 0 && (
                     <>

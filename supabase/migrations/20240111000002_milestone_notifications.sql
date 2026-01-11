@@ -1,4 +1,4 @@
--- Create a function to notify admins when a milestone is submitted for review
+-- Update the notification function to handle re-uploads (same status, new file)
 CREATE OR REPLACE FUNCTION public.notify_admins_of_milestone_submission()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -6,8 +6,9 @@ DECLARE
     campaign_title TEXT;
     student_name TEXT;
 BEGIN
-    -- Only proceed if status changed to 'pending_review'
-    IF NEW.status = 'pending_review' AND (OLD.status IS NULL OR OLD.status != 'pending_review') THEN
+    -- Proceed if status is 'pending_review' AND (it was not pending review before OR the proof_url changed)
+    IF NEW.status = 'pending_review' AND 
+       (OLD.status IS NULL OR OLD.status != 'pending_review' OR OLD.proof_url IS DISTINCT FROM NEW.proof_url) THEN
         
         -- Get campaign and student details for the message
         SELECT c.title, s.first_name || ' ' || s.last_name INTO campaign_title, student_name
@@ -27,7 +28,7 @@ BEGIN
             ) VALUES (
                 admin_record.id,
                 'Fee Statement Review Required',
-                'Campaign "' || COALESCE(campaign_title, 'Unknown') || '" has a new fee statement pending review.',
+                'Campaign "' || COALESCE(campaign_title, 'Unknown') || '" has a new (or updated) fee statement pending review.',
                 'info',
                 NOW(),
                 false
@@ -37,10 +38,3 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create the trigger
-DROP TRIGGER IF EXISTS on_milestone_submission ON public.campaign_milestones;
-CREATE TRIGGER on_milestone_submission
-    AFTER UPDATE ON public.campaign_milestones
-    FOR EACH ROW
-    EXECUTE FUNCTION public.notify_admins_of_milestone_submission();

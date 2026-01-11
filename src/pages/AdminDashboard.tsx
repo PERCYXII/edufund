@@ -925,9 +925,15 @@ const AdminDashboard: React.FC = () => {
         let bucket = 'documents';
         let path = urlOrPath;
 
-        // Handle full URLs
+        // Determine bucket based on URL structure or default to documents
+        // If it's a full URL, try to parse it. If not, assume it's a path in 'documents' bucket.
         if (urlOrPath.startsWith('http')) {
             try {
+                // const urlObj = new URL(urlOrPath); // unused
+                // const pathParts = urlObj.pathname.split('/'); // unused
+                // or /storage/v1/object/sign/documents/path/to/file
+
+                // Simple heuristic: check common buckets
                 if (urlOrPath.includes('/invoices/')) {
                     bucket = 'invoices';
                     path = urlOrPath.split('/invoices/')[1];
@@ -938,6 +944,11 @@ const AdminDashboard: React.FC = () => {
             } catch (e) {
                 console.error("Error parsing URL:", e);
             }
+        }
+
+        if (!path) {
+            toast.error("Invalid document path.");
+            return;
         }
 
         path = decodeURIComponent(path);
