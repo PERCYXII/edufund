@@ -166,3 +166,43 @@
 .form-group-full {
     grid-column: 1 / -1;
 }
+
+/* Explicit Form Styles to fix visibility issues */
+.split-form-label {
+    display: block !important;
+    margin-bottom: 0.5rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    /* Force nearly black */
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.split-form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background-color: #ffffff !important;
+    /* Force white background */
+    color: #1f2937 !important;
+    transition: all 0.15s ease;
+}
+
+.split-form-input:focus {
+    outline: none;
+    border-color: #2e5a7d;
+    box-shadow: 0 0 0 3px rgba(46, 90, 125, 0.1);
+}
+
+/* Override default select styles if needed */
+select.split-form-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}

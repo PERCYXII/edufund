@@ -213,32 +213,32 @@ const StudentRegister: React.FC = () => {
                             </h3>
                             <div className="form-grid form-grid-2">
                                 <div className="form-group">
-                                    <label className="form-label">First Name *</label>
+                                    <label className="split-form-label">First Name *</label>
                                     <input
                                         type="text"
-                                        className="form-input"
+                                        className="split-form-input"
                                         value={formData.firstName}
                                         onChange={(e) => updateFormData('firstName', e.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Last Name *</label>
+                                    <label className="split-form-label">Last Name *</label>
                                     <input
                                         type="text"
-                                        className="form-input"
+                                        className="split-form-input"
                                         value={formData.lastName}
                                         onChange={(e) => updateFormData('lastName', e.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group form-group-full">
-                                    <label className="form-label">Phone Number</label>
+                                    <label className="split-form-label">Phone Number</label>
                                     <div className="input-with-icon" style={{ position: 'relative' }}>
-                                        <Phone size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af' }} />
+                                        <Phone size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
                                         <input
                                             type="tel"
-                                            className="form-input"
+                                            className="split-form-input"
                                             style={{ paddingLeft: '40px' }}
                                             placeholder="+27..."
                                             value={formData.phone}
@@ -254,9 +254,9 @@ const StudentRegister: React.FC = () => {
                             </h3>
                             <div className="form-grid form-grid-2">
                                 <div className="form-group form-group-full">
-                                    <label className="form-label">University *</label>
+                                    <label className="split-form-label">University *</label>
                                     <select
-                                        className="form-input"
+                                        className="split-form-input"
                                         value={formData.universityId}
                                         onChange={(e) => updateFormData('universityId', e.target.value)}
                                         required
@@ -269,19 +269,19 @@ const StudentRegister: React.FC = () => {
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Student Number *</label>
+                                    <label className="split-form-label">Student Number *</label>
                                     <input
                                         type="text"
-                                        className="form-input"
+                                        className="split-form-input"
                                         value={formData.studentNumber}
                                         onChange={(e) => updateFormData('studentNumber', e.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Year of Study</label>
+                                    <label className="split-form-label">Year of Study</label>
                                     <select
-                                        className="form-input"
+                                        className="split-form-input"
                                         value={formData.yearOfStudy}
                                         onChange={(e) => updateFormData('yearOfStudy', e.target.value)}
                                     >
@@ -295,22 +295,22 @@ const StudentRegister: React.FC = () => {
                                     </select>
                                 </div>
                                 <div className="form-group form-group-full">
-                                    <label className="form-label">Course / Degree</label>
+                                    <label className="split-form-label">Course / Degree</label>
                                     <input
                                         type="text"
-                                        className="form-input"
+                                        className="split-form-input"
                                         placeholder="e.g. BSc Computer Science"
                                         value={formData.course}
                                         onChange={(e) => updateFormData('course', e.target.value)}
                                     />
                                 </div>
                                 <div className="form-group form-group-full">
-                                    <label className="form-label">Expected Graduation Date</label>
+                                    <label className="split-form-label">Expected Graduation Date</label>
                                     <div className="input-with-icon" style={{ position: 'relative' }}>
-                                        <Calendar size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af' }} />
+                                        <Calendar size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
                                         <input
                                             type="date"
-                                            className="form-input"
+                                            className="split-form-input"
                                             style={{ paddingLeft: '40px' }}
                                             value={formData.expectedGraduation}
                                             onChange={(e) => updateFormData('expectedGraduation', e.target.value)}
@@ -325,12 +325,12 @@ const StudentRegister: React.FC = () => {
                             </h3>
                             <div className="form-grid">
                                 <div className="form-group">
-                                    <label className="form-label">Email Address *</label>
+                                    <label className="split-form-label">Email Address *</label>
                                     <div className="input-with-icon" style={{ position: 'relative' }}>
-                                        <Mail size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af' }} />
+                                        <Mail size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
                                         <input
                                             type="email"
-                                            className="form-input"
+                                            className="split-form-input"
                                             style={{ paddingLeft: '40px' }}
                                             placeholder="student@university.ac.za"
                                             value={formData.email}
@@ -341,12 +341,12 @@ const StudentRegister: React.FC = () => {
                                 </div>
                                 <div className="form-grid form-grid-2" style={{ marginBottom: 0 }}>
                                     <div className="form-group">
-                                        <label className="form-label">Password *</label>
+                                        <label className="split-form-label">Password *</label>
                                         <div className="input-with-icon" style={{ position: 'relative' }}>
-                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af' }} />
+                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
                                             <input
                                                 type="password"
-                                                className="form-input"
+                                                className="split-form-input"
                                                 style={{ paddingLeft: '40px' }}
                                                 placeholder="••••••••"
                                                 value={formData.password}
@@ -357,12 +357,12 @@ const StudentRegister: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label">Confirm Password *</label>
+                                        <label className="split-form-label">Confirm Password *</label>
                                         <div className="input-with-icon" style={{ position: 'relative' }}>
-                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af' }} />
+                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
                                             <input
                                                 type="password"
-                                                className="form-input"
+                                                className="split-form-input"
                                                 style={{ paddingLeft: '40px' }}
                                                 placeholder="••••••••"
                                                 value={formData.confirmPassword}
@@ -377,7 +377,7 @@ const StudentRegister: React.FC = () => {
 
                             <button
                                 type="submit"
-                                className="btn btn-primary w-full mt-8 py-3 text-lg"
+                                className="w-full btn btn-primary mt-8 py-3 text-lg"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
