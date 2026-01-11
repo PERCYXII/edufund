@@ -16,7 +16,8 @@ import {
     Landmark,
     XCircle,
     FileText,
-    ExternalLink
+    ExternalLink,
+    AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
@@ -570,6 +571,8 @@ const CampaignDetail: React.FC = () => {
                         idUrl: c.id_url,
                         enrollmentUrl: c.enrollment_url,
                         invoiceUrl: c.invoice_url,
+                        isPaused: c.is_paused,
+                        lastMilestoneCleared: c.last_milestone_cleared,
                         createdAt: c.created_at,
                         updatedAt: c.updated_at,
                         student: {
@@ -1038,13 +1041,24 @@ const CampaignDetail: React.FC = () => {
                                 </div>
                             </div>
 
-                            <button
-                                className="btn btn-primary btn-lg donate-btn"
-                                onClick={handleDonateClick}
-                                disabled={(!donationAmount && !customAmount)}
-                            >
-                                Donate Now
-                            </button>
+                            {campaign.isPaused ? (
+                                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-4 text-center">
+                                    <AlertCircle className="text-yellow-600 mx-auto mb-2" size={24} />
+                                    <h4 className="font-bold text-yellow-800 mb-1">Campaign Temporarily Paused</h4>
+                                    <p className="text-sm text-yellow-700">
+                                        This campaign has reached a funding milestone and is currently paused for standard verification.
+                                        Donations will resume once the student provides the necessary updates.
+                                    </p>
+                                </div>
+                            ) : (
+                                <button
+                                    className="btn btn-primary btn-lg donate-btn"
+                                    onClick={handleDonateClick}
+                                    disabled={(!donationAmount && !customAmount)}
+                                >
+                                    Donate Now
+                                </button>
+                            )}
 
                             <p className="donation-note">
                                 Your donation will be sent directly to {campaign.university.name}

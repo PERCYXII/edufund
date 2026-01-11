@@ -1173,3 +1173,17 @@
 .font-bold {
     font-weight: 700;
 }
+
+/* Badges */
+.badge {
+    display: inline-flex;
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.badge-blue {
+    background: var(--color-primary-100);
+    color: var(--color-primary-700);
+}

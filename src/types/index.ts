@@ -60,6 +60,8 @@ export interface Campaign {
   startDate: string;
   endDate: string;
   status: 'draft' | 'pending' | 'active' | 'completed' | 'expired' | 'rejected';
+  isPaused?: boolean;
+  lastMilestoneCleared?: number;
   type: 'standard' | 'quick_assist';
   category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
   isUrgent: boolean;
@@ -77,6 +79,16 @@ export interface Campaign {
 export interface CampaignWithStudent extends Campaign {
   student: Student;
   university: University;
+}
+
+export interface CampaignMilestone {
+  id: string;
+  campaignId: string;
+  milestonePercentage: number;
+  status: 'pending_upload' | 'pending_review' | 'approved' | 'rejected';
+  proofUrl?: string;
+  rejectionReason?: string;
+  createdAt: string;
 }
 
 export interface FundingItem {

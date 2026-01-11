@@ -36,7 +36,7 @@ import { useAuth } from '../context/AuthContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
-import type { Campaign, University } from '../types';
+import type { Campaign, University, CampaignMilestone } from '../types';
 import { CAMPAIGN_CATEGORIES } from '../data/constants';
 import './Dashboard.css';
 import './Modal.css';
@@ -66,6 +66,10 @@ const StudentDashboard: React.FC = () => {
     const [allDonations, setAllDonations] = useState<any[]>([]);
     const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
+    const [pendingMilestone, setPendingMilestone] = useState<CampaignMilestone | null>(null);
+    const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+    const [milestoneFile, setMilestoneFile] = useState<File | null>(null);
+    const [uploadingMilestone, setUploadingMilestone] = useState(false);
 
     const percentFunded = campaign && campaign.goal > 0 ? Math.min(100, Math.round(((campaign.raised || 0) / campaign.goal) * 100)) : 0;
 
@@ -165,6 +169,51 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
+    const handleMilestoneUpload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!milestoneFile || !pendingMilestone) return;
+        setUploadingMilestone(true);
+
+        try {
+            const fileExt = milestoneFile.name.split('.').pop();
+            const fileName = `${campaign?.id}/milestones/${pendingMilestone.milestonePercentage}_${Date.now()}.${fileExt}`;
+
+            // Upload to documents bucket
+            const { error: uploadError, data: uploadData } = await supabase.storage
+                .from('documents')
+                .upload(fileName, milestoneFile);
+
+            if (uploadError) throw uploadError;
+
+            // Update milestone record
+            const { error: updateError } = await supabase
+                .from('campaign_milestones')
+                .update({
+                    status: 'pending_review',
+                    proof_url: uploadData.path,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingMilestone.id);
+
+            if (updateError) throw updateError;
+
+
+
+            alert("Fee statement uploaded successfully! It is now pending review.");
+            setShowMilestoneModal(false);
+            setMilestoneFile(null);
+            // Refresh to update status
+            window.location.reload();
+
+        } catch (err: any) {
+            console.error("Error uploading milestone proof:", err);
+            alert("Failed to upload: " + err.message);
+        } finally {
+            setUploadingMilestone(false);
+        }
+    };
+
+
     const handleShowDonors = async () => {
         if (!campaign) return;
         setShowDonorsModal(true);
@@ -241,25 +290,36 @@ const StudentDashboard: React.FC = () => {
                 if (campaigns && campaigns.length > 0) {
                     const rawCampaign = campaigns[0];
 
-                    // Fetch donor count
-                    const { count: donorCount } = await supabase
+                    // Fetch all donations with details
+                    const { data: campaignDonations } = await supabase
                         .from('donations')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('campaign_id', rawCampaign.id);
+                        .select('amount, donor_id, is_anonymous, payment_status')
+                        .eq('campaign_id', rawCampaign.id)
+                        .eq('payment_status', 'completed');
+
+                    const actualRaised = campaignDonations?.reduce((sum, d) => sum + d.amount, 0) || 0;
+
+                    // Calculate unique donors
+                    // If donor_id is present, count unique IDs.
+                    // If donor_id is null (e.g. guest), count each transaction as a unique donor for now (unless we have guest_email).
+                    const uniqueDonors = new Set();
+                    let guestDonorCount = 0;
+
+                    campaignDonations?.forEach(d => {
+                        if (d.donor_id) {
+                            uniqueDonors.add(d.donor_id);
+                        } else {
+                            guestDonorCount++;
+                        }
+                    });
+
+                    const totalDonors = uniqueDonors.size + guestDonorCount;
 
                     // Fetch funding items
                     const { data: fundingItems } = await supabase
                         .from('funding_items')
                         .select('*')
                         .eq('campaign_id', rawCampaign.id);
-
-                    // Fetch real-time raised amount
-                    const { data: allCampaignDonations } = await supabase
-                        .from('donations')
-                        .select('amount')
-                        .eq('campaign_id', rawCampaign.id);
-
-                    const actualRaised = allCampaignDonations?.reduce((sum, d) => sum + d.amount, 0) || 0;
 
                     // Calculate days left
                     const endDate = new Date(rawCampaign.end_date);
@@ -274,7 +334,7 @@ const StudentDashboard: React.FC = () => {
                         story: rawCampaign.story,
                         goal: Number(rawCampaign.goal_amount),
                         raised: actualRaised,
-                        donors: donorCount || 0,
+                        donors: totalDonors,
                         daysLeft: daysLeft > 0 ? daysLeft : 0,
                         startDate: rawCampaign.start_date,
                         endDate: rawCampaign.end_date,
@@ -294,6 +354,8 @@ const StudentDashboard: React.FC = () => {
                         idUrl: rawCampaign.id_url,
                         enrollmentUrl: rawCampaign.enrollment_url,
                         videoUrl: rawCampaign.video_url,
+                        isPaused: rawCampaign.is_paused,
+                        lastMilestoneCleared: rawCampaign.last_milestone_cleared,
                         createdAt: rawCampaign.created_at,
                         updatedAt: rawCampaign.updated_at
                     };
@@ -318,6 +380,30 @@ const StudentDashboard: React.FC = () => {
                             amount: d.amount,
                             anonymous: d.is_anonymous
                         })));
+                    }
+                }
+
+                // Fetch Pending Milestone
+                if (campaigns && campaigns.length > 0) {
+                    const { data: milestoneData } = await supabase
+                        .from('campaign_milestones')
+                        .select('*')
+                        .eq('campaign_id', campaigns[0].id)
+                        .in('status', ['pending_upload', 'rejected', 'pending_review'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (milestoneData) {
+                        setPendingMilestone({
+                            id: milestoneData.id,
+                            campaignId: milestoneData.campaign_id,
+                            milestonePercentage: milestoneData.milestone_percentage,
+                            status: milestoneData.status,
+                            proofUrl: milestoneData.proof_url,
+                            rejectionReason: milestoneData.rejection_reason,
+                            createdAt: milestoneData.created_at
+                        });
                     }
                 }
 
@@ -552,6 +638,28 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 )}
 
+                                {campaign?.isPaused && (
+                                    <div className="alert alert-warning mb-6 border-l-4 border-orange-500 bg-orange-50 p-4 rounded-r shadow-sm">
+                                        <div className="flex items-start gap-4">
+                                            <AlertCircle className="text-orange-600 shrink-0" size={24} />
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-orange-800 text-lg mb-1">Campaign Temporarily Paused</h4>
+                                                <p className="text-orange-700 mb-3">
+                                                    Your campaign has reached a funding milestone and is paused.
+                                                    Please upload your updated fee statement to resume fundraising.
+                                                </p>
+                                                <button
+                                                    onClick={() => setShowMilestoneModal(true)}
+                                                    className="btn btn-sm btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg"
+                                                >
+                                                    <Upload size={16} className="mr-2" />
+                                                    Upload Fee Statement
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {!campaign ? (
                                     <div className="card empty-campaign-card">
                                         {/* Empty state... */}
@@ -579,6 +687,27 @@ const StudentDashboard: React.FC = () => {
                                     </div>
                                 ) : (
                                     <>
+                                        {/* Paused Alert */}
+                                        {campaign.isPaused && (
+                                            <div className="alert alert-warning border-l-4 border-yellow-500 bg-yellow-50 mb-6">
+                                                <AlertCircle size={28} className="text-yellow-600" />
+                                                <div className="flex-1">
+                                                    <h4 className="text-yellow-800 font-bold text-lg">Campaign Paused: Funding Milestone Reached</h4>
+                                                    <p className="text-yellow-700 mb-3">
+                                                        Congratulations! You've reached {pendingMilestone?.milestonePercentage || 'a funding'}% of your goal.
+                                                        To ensure transparency, please upload your latest fee statement to verify your continued need.
+                                                        Your campaign is paused until this is approved.
+                                                    </p>
+                                                    <button
+                                                        className="btn btn-sm btn-primary"
+                                                        onClick={() => setShowMilestoneModal(true)}
+                                                    >
+                                                        <Upload size={16} />
+                                                        Upload Fee Statement
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                         {/* Status alerts... */}
                                         {campaign.status === 'pending' && (
                                             <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
@@ -1263,6 +1392,45 @@ const StudentDashboard: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+            {showMilestoneModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Upload Fee Statement</h3>
+                        <p className="mb-4 text-gray-600">
+                            Please upload your latest fee statement to verify your funding needs.
+                            This is required to unpause your campaign.
+                        </p>
+                        <form onSubmit={handleMilestoneUpload}>
+                            <div className="form-group">
+                                <label className="form-label">Fee Statement (PDF/Image)</label>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg"
+                                    className="form-input"
+                                    onChange={(e) => setMilestoneFile(e.target.files?.[0] || null)}
+                                    required
+                                />
+                            </div>
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowMilestoneModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={!milestoneFile || uploadingMilestone}
+                                >
+                                    {uploadingMilestone ? 'Uploading...' : 'Submit for Review'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
@@ -2091,6 +2259,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                         </div>
                     )}
                 </div>
+
             </div>
         </>
     );

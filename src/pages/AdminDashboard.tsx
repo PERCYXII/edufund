@@ -65,6 +65,7 @@ const AdminDashboard: React.FC = () => {
     const [recentCampaigns, setRecentCampaigns] = useState<CampaignWithStudent[]>([]);
     const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([]);
     const [pendingDonations, setPendingDonations] = useState<any[]>([]);
+    const [pendingMilestones, setPendingMilestones] = useState<any[]>([]);
     const [allTransactions, setAllTransactions] = useState<any[]>([]); // New state for transactions tab
     const [universities, setUniversities] = useState<University[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
@@ -205,6 +206,23 @@ const AdminDashboard: React.FC = () => {
                 .eq('status', 'pending');
 
             if (verifError) throw verifError;
+
+            // Fetch Pending Milestones
+            const { data: milestoneData } = await supabase
+                .from('campaign_milestones')
+                .select(`
+                    *,
+                    campaign:campaigns (
+                        title,
+                        student:students (
+                            first_name, last_name, email
+                        )
+                    )
+                `)
+                .eq('status', 'pending_review')
+                .order('created_at', { ascending: true });
+
+            setPendingMilestones(milestoneData || []);
 
             // Map to ExtendedVerification
             const mappedVerifications: ExtendedVerification[] = (verifData || []).map((v: any) => ({
@@ -442,7 +460,7 @@ const AdminDashboard: React.FC = () => {
 
             setStats({
                 // Stats
-                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0), // Include donations
+                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0) + (milestoneData?.length || 0),
                 pendingCampaignsCount: pendingCampaignsData.length,
                 activeCampaigns: activeCampaignsData.length,
                 totalFunded: totalFunded,
@@ -800,15 +818,105 @@ const AdminDashboard: React.FC = () => {
             // Update both state arrays
             setRecentCampaigns(prev => prev.filter(c => c.id !== id));
             setPendingCampaigns(prev => prev.filter(c => c.id !== id));
-
-            // Refresh stats
-            fetchDashboardData();
             toast.success("Campaign deleted.");
         } catch (error) {
             console.error("Error deleting campaign:", error);
-            toast.error("Failed to delete campaign. This may be due to active donations or server restrictions.");
+            toast.error("Failed to delete campaign.");
         }
     };
+
+    const handleApproveMilestone = async (milestone: any) => {
+        try {
+            // 1. Update Milestone Status
+            const { error: msError } = await supabase
+                .from('campaign_milestones')
+                .update({ status: 'approved' })
+                .eq('id', milestone.id);
+
+            if (msError) throw msError;
+
+            // 2. Unpause Campaign and Update Last Cleared
+            const { error: campError } = await supabase
+                .from('campaigns')
+                .update({
+                    is_paused: false,
+                    last_milestone_cleared: milestone.milestone_percentage
+                })
+                .eq('id', milestone.campaign_id);
+
+            if (campError) throw campError;
+
+            // 3. Notify Student
+            // Assume we need student ID from campaign relationship (not in milestone object directly, found via loop or query)
+            // But we fetched it in 'milestoneData' nested
+            // The milestone object here comes from 'pendingMilestones' state which has the nested structure.
+
+            /* 
+               Logic note: The 'milestone' argument passed here is from the map() in render.
+               It should have the structure from fetch.
+            */
+            // const studentName = milestone.campaign?.student?.first_name || 'Student';
+
+            // We need student_id. It's not in the join I selected? 
+            // Wait, I selected 'campaign:campaigns(...)'. campaigns table has student_id.
+            // I should select student_id in the fetch query to be safe, or fetch it now.
+
+            // Re-fetch to notify logic or just allow database trigger to handle?
+            // Let's do a direct notification query.
+            const { data: cData } = await supabase.from('campaigns').select('student_id').eq('id', milestone.campaign_id).single();
+            if (cData) {
+                await supabase.from('notifications').insert({
+                    user_id: cData.student_id,
+                    title: 'Fee Statement Approved!',
+                    message: `Your uploaded fee statement for the ${milestone.milestone_percentage}% milestone has been approved. Your campaign is active again.`,
+                    type: 'success'
+                });
+            }
+
+            toast.success("Milestone approved and campaign unpaused.");
+            fetchDashboardData();
+
+        } catch (err: any) {
+            console.error("Error approving milestone:", err);
+            toast.error("Failed to approve milestone.");
+        }
+    };
+
+    const handleRejectMilestone = async (milestone: any) => {
+        const reason = prompt("Enter rejection reason:");
+        if (!reason) return;
+
+        try {
+            // 1. Update Milestone Status (Rejected)
+            const { error: msError } = await supabase
+                .from('campaign_milestones')
+                .update({
+                    status: 'rejected',
+                    rejection_reason: reason
+                })
+                .eq('id', milestone.id);
+
+            if (msError) throw msError;
+
+            // 2. Notify Student
+            const { data: cData } = await supabase.from('campaigns').select('student_id').eq('id', milestone.campaign_id).single();
+            if (cData) {
+                await supabase.from('notifications').insert({
+                    user_id: cData.student_id,
+                    title: 'Fee Statement Rejected',
+                    message: `Your fee statement for ${milestone.milestone_percentage}% milestone was rejected. Reason: ${reason}. Please upload a valid statement.`,
+                    type: 'error'
+                });
+            }
+
+            toast.success("Milestone rejected.");
+            fetchDashboardData();
+        } catch (err: any) {
+            console.error("Error rejecting milestone:", err);
+            toast.error("Failed to reject milestone.");
+        }
+    };
+
 
 
     const handleViewDocument = async (urlOrPath: string, docTitle: string = 'Document Preview') => {
@@ -1246,6 +1354,71 @@ const AdminDashboard: React.FC = () => {
                                         <CheckCircle size={48} className="empty-icon" />
                                         <h3>All caught up!</h3>
                                         <p>No pending verifications at the moment.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Pending Milestones */}
+                            <div className="admin-section">
+                                <h2 className="admin-section-title">Pending Milestone Reviews</h2>
+                                {pendingMilestones.length > 0 ? (
+                                    <div className="admin-table-wrapper">
+                                        <table className="admin-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Campaign</th>
+                                                    <th>Milestone</th>
+                                                    <th>Student</th>
+                                                    <th>Statement</th>
+                                                    <th>Date</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pendingMilestones.map((ms) => (
+                                                    <tr key={ms.id}>
+                                                        <td>{ms.campaign?.title || 'Unknown'}</td>
+                                                        <td>
+                                                            <span className="badge badge-blue">{ms.milestone_percentage}% Funded</span>
+                                                        </td>
+                                                        <td>{ms.campaign?.student?.first_name} {ms.campaign?.student?.last_name}</td>
+                                                        <td>
+                                                            <button
+                                                                className="document-link-pill"
+                                                                onClick={() => handleViewDocument(ms.proof_url, "Fee Statement")}
+                                                            >
+                                                                <FileText size={14} /> View PDF
+                                                            </button>
+                                                        </td>
+                                                        <td>{new Date(ms.created_at).toLocaleDateString()}</td>
+                                                        <td>
+                                                            <div className="action-buttons">
+                                                                <button
+                                                                    className="action-btn approve"
+                                                                    onClick={() => handleApproveMilestone(ms)}
+                                                                    title="Approve & Unpause"
+                                                                >
+                                                                    <CheckCircle size={16} />
+                                                                </button>
+                                                                <button
+                                                                    className="action-btn reject"
+                                                                    onClick={() => handleRejectMilestone(ms)}
+                                                                    title="Reject"
+                                                                >
+                                                                    <XCircle size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="empty-state">
+                                        <CheckCircle size={48} className="empty-icon" />
+                                        <h3>No pending milestones</h3>
+                                        <p>All active campaigns are verified.</p>
                                     </div>
                                 )}
                             </div>
