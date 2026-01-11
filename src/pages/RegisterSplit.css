@@ -1,0 +1,168 @@
+/* Extended styles for Split Layout Registration */
+
+.register-container.wide {
+    max-width: 1000px;
+}
+
+.register-split-card {
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    overflow: hidden;
+    width: 100%;
+}
+
+@media (min-width: 768px) {
+    .register-split-card {
+        flex-direction: row;
+        min-height: 600px;
+    }
+}
+
+.register-side-panel {
+    background: var(--color-primary-600);
+    color: white;
+    padding: var(--spacing-8);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+@media (min-width: 768px) {
+    .register-side-panel {
+        width: 35%;
+        flex-shrink: 0;
+    }
+}
+
+/* Decorative circle overlay for visual interest */
+.register-side-panel::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    right: -100px;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+.register-side-header {
+    margin-bottom: var(--spacing-8);
+    position: relative;
+    z-index: 1;
+}
+
+.register-side-title {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    margin-bottom: var(--spacing-2);
+}
+
+.register-side-subtitle {
+    color: var(--color-primary-100);
+    font-size: var(--font-size-lg);
+}
+
+.register-side-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6);
+    position: relative;
+    z-index: 1;
+}
+
+.side-feature {
+    display: flex;
+    gap: var(--spacing-3);
+    align-items: flex-start;
+}
+
+.side-feature-icon {
+    background: rgba(255, 255, 255, 0.15);
+    padding: var(--spacing-2);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.side-feature h4 {
+    font-weight: 600;
+    margin-bottom: var(--spacing-1);
+    font-size: var(--font-size-md);
+    color: white;
+}
+
+.side-feature p {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary-100);
+    line-height: 1.4;
+}
+
+.register-side-footer {
+    margin-top: var(--spacing-8);
+    position: relative;
+    z-index: 1;
+    font-size: var(--font-size-sm);
+    color: var(--color-primary-200);
+}
+
+.register-side-footer a {
+    color: white;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.register-side-footer a:hover {
+    text-decoration: underline;
+}
+
+/* Form Panel */
+.register-form-panel {
+    padding: var(--spacing-8);
+    flex-grow: 1;
+    background: white;
+    /* Clean white background */
+}
+
+@media (min-width: 768px) {
+    .register-form-panel {
+        padding: var(--spacing-10);
+    }
+}
+
+.form-section-title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-gray-900);
+    margin-bottom: var(--spacing-4);
+    padding-bottom: var(--spacing-2);
+    border-bottom: 1px solid var(--color-gray-200);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+/* Form Grid System for inside the panel */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+}
+
+@media (min-width: 640px) {
+    .form-grid-2 {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.form-group-full {
+    grid-column: 1 / -1;
+}
