@@ -90,6 +90,140 @@ const StudentDashboard: React.FC = () => {
 
     const percentFunded = campaign && campaign.goal > 0 ? Math.min(100, Math.round(((campaign.raised || 0) / campaign.goal) * 100)) : 0;
 
+    const fetchVerificationStatus = async () => {
+        if (!user) return;
+
+        // Initialize settings form
+        if (user.student) {
+            setSettingsPhone(user.student.phone || '');
+            setSettingsFirstName(user.student.firstName || '');
+            setSettingsLastName(user.student.lastName || '');
+        }
+
+        const { count, error } = await supabase
+            .from('verification_requests')
+            .select('*', { count: 'exact', head: true })
+            .eq('student_id', user.id);
+
+        if (!error) {
+            setVerificationCount(count);
+        }
+    };
+
+    const fetchDashboardData = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            // Fetch Campaign
+            const { data: campaigns, error: campaignError } = await supabase
+                .from('campaigns')
+                .select('*')
+                .eq('student_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (campaignError) throw campaignError;
+
+            if (campaigns && campaigns.length > 0) {
+                const rawCampaign = campaigns[0];
+
+                // Fetch funding items
+                const { data: fundingItems } = await supabase
+                    .from('funding_items')
+                    .select('*')
+                    .eq('campaign_id', rawCampaign.id);
+
+                // Calculate days left
+                const endDate = new Date(rawCampaign.end_date);
+                const now = new Date();
+                const diffTime = endDate.getTime() - now.getTime();
+                const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                const mappedCampaign: Campaign = {
+                    id: rawCampaign.id,
+                    studentId: rawCampaign.student_id,
+                    title: rawCampaign.title,
+                    story: rawCampaign.story,
+                    goal: Number(rawCampaign.goal_amount),
+                    raised: Number(rawCampaign.raised_amount || 0),
+                    donors: Number(rawCampaign.donors || 0),
+                    daysLeft: daysLeft > 0 ? daysLeft : 0,
+                    startDate: rawCampaign.start_date,
+                    endDate: rawCampaign.end_date,
+                    status: rawCampaign.status,
+                    type: rawCampaign.type,
+                    category: rawCampaign.category,
+                    isUrgent: rawCampaign.is_urgent,
+                    fundingBreakdown: (fundingItems || []).map((item: any) => ({
+                        id: item.id,
+                        name: item.name,
+                        amount: Number(item.amount),
+                        description: item.description
+                    })),
+                    images: rawCampaign.images,
+                    invoiceUrl: rawCampaign.invoice_url,
+                    feeStatementUrl: rawCampaign.fee_statement_url,
+                    idUrl: rawCampaign.id_url,
+                    enrollmentUrl: rawCampaign.enrollment_url,
+                    videoUrl: rawCampaign.video_url,
+                    createdAt: rawCampaign.created_at,
+                    updatedAt: rawCampaign.updated_at
+                };
+
+                setCampaign(mappedCampaign as unknown as CampaignWithStudent);
+
+                // Fetch Recent Donations
+                const { data: donations, error: donationError } = await supabase
+                    .from('donations')
+                    .select('*, donors(first_name, last_name)')
+                    .eq('campaign_id', campaigns[0].id)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+
+                if (donationError) {
+                    console.error('Error fetching donations:', donationError);
+                } else if (donations) {
+                    setRecentDonations(donations.map(d => ({
+                        id: d.id,
+                        name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
+                        date: new Date(d.created_at).toLocaleDateString(),
+                        amount: d.amount,
+                        isAnonymous: d.is_anonymous
+                    })));
+                }
+            }
+
+            // Fetch University
+            if (user.student?.universityId) {
+                const { data: uni, error: uniError } = await supabase
+                    .from('universities')
+                    .select('*')
+                    .eq('id', user.student.universityId)
+                    .single();
+
+                if (uniError) {
+                    console.error('Error fetching university:', uniError);
+                } else if (uni) {
+                    const mappedUniversity: University = {
+                        id: uni.id,
+                        name: uni.name,
+                        bankName: uni.bank_name,
+                        accountNumber: uni.account_number,
+                        branchCode: uni.branch_code,
+                        accountName: uni.account_name,
+                        createdAt: uni.created_at,
+                        updatedAt: uni.updated_at
+                    };
+                    setUniversity(mappedUniversity);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching dashboard data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleLogout = async () => {
         try {
             await logout();
@@ -129,7 +263,9 @@ const StudentDashboard: React.FC = () => {
             if (updateError) throw updateError;
 
             alert('Profile image updated successfully!');
-            window.location.reload();
+            await refreshUser(); // Refresh user context to show new image
+            await fetchVerificationStatus(); // Refresh status
+            await fetchDashboardData(); // Refresh campaign data
 
         } catch (error: any) {
             console.error('Error uploading image:', error);
@@ -182,7 +318,7 @@ const StudentDashboard: React.FC = () => {
 
             alert("Campaign extended successfully!");
             setShowExtendModal(false);
-            window.location.reload();
+            await fetchDashboardData();
         } catch (err: any) {
             console.error("Error extending campaign:", err);
             alert("Failed to extend: " + err.message);
@@ -227,153 +363,13 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
+
+
     useEffect(() => {
-        const fetchVerificationStatus = async () => {
-            if (!user) return;
-
-            // Initialize settings form
-            if (user.student) {
-                setSettingsPhone(user.student.phone || '');
-                setSettingsFirstName(user.student.firstName || '');
-                setSettingsLastName(user.student.lastName || '');
-            }
-
-            const { count, error } = await supabase
-                .from('verification_requests')
-                .select('*', { count: 'exact', head: true })
-                .eq('student_id', user.id);
-
-            if (!error) {
-                setVerificationCount(count);
-            }
-        };
         fetchVerificationStatus();
     }, [user]);
 
     useEffect(() => {
-        const fetchDashboardData = async () => {
-            if (!user) return;
-            setLoading(true);
-            try {
-                // Fetch Campaign
-                const { data: campaigns, error: campaignError } = await supabase
-                    .from('campaigns')
-                    .select('*')
-                    .eq('student_id', user.id)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
-
-                if (campaignError) throw campaignError;
-
-                if (campaigns && campaigns.length > 0) {
-                    const rawCampaign = campaigns[0];
-
-                    // Fetch funding items
-                    const { data: fundingItems } = await supabase
-                        .from('funding_items')
-                        .select('*')
-                        .eq('campaign_id', rawCampaign.id);
-
-                    // Calculate days left
-                    const endDate = new Date(rawCampaign.end_date);
-                    const now = new Date();
-                    const diffTime = endDate.getTime() - now.getTime();
-                    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    const mappedCampaign: Campaign = {
-                        id: rawCampaign.id,
-                        studentId: rawCampaign.student_id,
-                        title: rawCampaign.title,
-                        story: rawCampaign.story,
-                        goal: Number(rawCampaign.goal_amount),
-                        raised: Number(rawCampaign.raised_amount || 0),
-                        donors: Number(rawCampaign.donors || 0),
-                        daysLeft: daysLeft > 0 ? daysLeft : 0,
-                        startDate: rawCampaign.start_date,
-                        endDate: rawCampaign.end_date,
-                        status: rawCampaign.status,
-                        type: rawCampaign.type,
-                        category: rawCampaign.category,
-                        isUrgent: rawCampaign.is_urgent,
-                        fundingBreakdown: (fundingItems || []).map((item: any) => ({
-                            id: item.id,
-                            name: item.name,
-                            amount: Number(item.amount),
-                            description: item.description
-                        })),
-                        images: rawCampaign.images,
-                        invoiceUrl: rawCampaign.invoice_url,
-                        feeStatementUrl: rawCampaign.fee_statement_url,
-                        idUrl: rawCampaign.id_url,
-                        enrollmentUrl: rawCampaign.enrollment_url,
-                        videoUrl: rawCampaign.video_url,
-                        createdAt: rawCampaign.created_at,
-                        updatedAt: rawCampaign.updated_at
-                    };
-
-                    setCampaign(mappedCampaign as unknown as CampaignWithStudent);
-
-                    // Fetch Recent Donations
-                    const { data: donations, error: donationError } = await supabase
-                        .from('donations')
-                        .select('*, donors(first_name, last_name)')
-                        .eq('campaign_id', campaigns[0].id)
-                        .order('created_at', { ascending: false })
-                        .limit(5);
-
-                    if (donationError) {
-                        console.error('Error fetching donations:', donationError);
-                    } else if (donations) {
-                        setRecentDonations(donations.map(d => ({
-                            id: d.id,
-                            name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
-                            date: new Date(d.created_at).toLocaleDateString(),
-                            amount: d.amount,
-                            isAnonymous: d.is_anonymous
-                        })));
-                    }
-                }
-
-
-
-                // Fetch University
-                if (user.student?.universityId) {
-                    const { data: uni, error: uniError } = await supabase
-                        .from('universities')
-                        .select('*')
-                        .eq('id', user.student.universityId)
-                        .single();
-
-                    if (uniError) {
-                        console.error('Error fetching university:', uniError);
-                    } else if (uni) {
-                        const mappedUniversity: University = {
-                            id: uni.id,
-                            name: uni.name,
-                            bankName: uni.bank_name,
-                            accountNumber: uni.account_number,
-                            branchCode: uni.branch_code,
-                            accountName: uni.account_name,
-                            logo: uni.logo_url || uni.logo,
-                            website: uni.website,
-                            email: uni.email,
-                            phone: uni.phone,
-                            physicalAddress: uni.physical_address,
-                            postalAddress: uni.postal_address,
-                            contactPerson: uni.contact_person,
-                            viceChancellor: uni.vice_chancellor
-                        };
-                        setUniversity(mappedUniversity);
-                    }
-                }
-
-            } catch (err) {
-                console.error('Error fetching dashboard data:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchDashboardData();
     }, [user]);
 
@@ -562,7 +558,10 @@ const StudentDashboard: React.FC = () => {
                                         </p>
                                     </div>
                                 ) : (
-                                    <StudentVerificationForm user={user} onSuccess={() => window.location.reload()} />
+                                    <StudentVerificationForm user={user} onSuccess={async () => {
+                                        await refreshUser();
+                                        await fetchVerificationStatus();
+                                    }} />
                                 )}
                             </div>
                         </div>
@@ -1008,9 +1007,9 @@ const StudentDashboard: React.FC = () => {
                                     <CampaignForm
                                         university={university}
                                         user={user}
-                                        onSuccess={() => {
+                                        onSuccess={async () => {
                                             setActiveTab('campaign');
-                                            window.location.reload();
+                                            await fetchDashboardData();
                                         }}
                                         onCancel={() => setActiveTab('overview')}
                                     /> : <div>Loading university info...</div>
@@ -1049,7 +1048,10 @@ const StudentDashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <StudentVerificationForm user={user} onSuccess={() => window.location.reload()} />
+                                        <StudentVerificationForm user={user} onSuccess={async () => {
+                                            await refreshUser();
+                                            await fetchVerificationStatus();
+                                        }} />
                                     </div>
                                 </div>
                             )
@@ -1064,9 +1066,9 @@ const StudentDashboard: React.FC = () => {
                                 user={user}
                                 initialData={campaign}
                                 isEditing={true}
-                                onSuccess={() => {
+                                onSuccess={async () => {
                                     setActiveTab('campaign');
-                                    window.location.reload();
+                                    await fetchDashboardData();
                                 }}
                                 onCancel={() => setActiveTab('campaign')}
                             />
@@ -1179,7 +1181,7 @@ const StudentDashboard: React.FC = () => {
                                                             .eq('id', user.id);
                                                         if (error) throw error;
                                                         alert("Settings saved!");
-                                                        window.location.reload();
+                                                        await refreshUser();
                                                     } catch (err: any) {
                                                         alert("Failed to save: " + err.message);
                                                     } finally {

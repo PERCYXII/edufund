@@ -434,7 +434,7 @@ const CampaignDetail: React.FC = () => {
 
             success("Campaign approved and student verified!");
             // Refresh
-            window.location.reload();
+            await fetchCampaign();
         } catch (err: any) {
             console.error("Error approving:", err);
             toastError("Failed to approve campaign.");
@@ -482,7 +482,7 @@ const CampaignDetail: React.FC = () => {
             });
 
             success("Campaign rejected.");
-            window.location.reload();
+            await fetchCampaign();
         } catch (err: any) {
             console.error("Error rejecting:", err);
             toastError("Failed to reject campaign.");
@@ -529,92 +529,92 @@ const CampaignDetail: React.FC = () => {
         }
     };
 
-    useEffect(() => {
-        const fetchCampaign = async () => {
-            if (!id) return;
-            setLoading(true);
-            try {
-                // Fetch Campaign with student and university
-                const { data: c, error } = await supabase
-                    .from('campaigns')
-                    .select(`
+    const fetchCampaign = async () => {
+        if (!id) return;
+        setLoading(true);
+        try {
+            // Fetch Campaign with student and university
+            const { data: c, error } = await supabase
+                .from('campaigns')
+                .select(`
+                    *,
+                    student:students (
                         *,
-                        student:students (
-                            *,
-                            university:universities (*)
-                        )
-                    `)
-                    .eq('id', id)
-                    .single();
+                        university:universities (*)
+                    )
+                `)
+                .eq('id', id)
+                .single();
 
-                if (error) throw error;
+            if (error) throw error;
 
-                if (c) {
-                    const mapped: CampaignWithStudent = {
-                        id: c.id,
-                        studentId: c.student_id,
-                        title: c.title,
-                        story: c.story,
-                        goal: c.goal_amount || 0,
-                        raised: c.raised_amount || 0,
-                        donors: c.donors || 0,
-                        daysLeft: 30, // ideally calc
-                        startDate: c.start_date,
-                        endDate: c.end_date,
-                        status: c.status,
-                        type: c.type || (c.is_urgent ? 'quick_assist' : 'standard'),
-                        category: c.category,
-                        isUrgent: c.is_urgent,
-                        fundingBreakdown: c.funding_breakdown || [],
-                        images: c.images,
-                        feeStatementUrl: c.fee_statement_url,
-                        idUrl: c.id_url,
-                        enrollmentUrl: c.enrollment_url,
-                        invoiceUrl: c.invoice_url,
-                        createdAt: c.created_at,
-                        updatedAt: c.updated_at,
-                        student: {
-                            id: c.student.id,
-                            email: c.student.email,
-                            firstName: c.student.first_name,
-                            lastName: c.student.last_name,
-                            phone: c.student.phone,
-                            universityId: c.student.university_id,
-                            studentNumber: c.student.student_number,
-                            course: c.student.course,
-                            yearOfStudy: c.student.year_of_study,
-                            expectedGraduation: c.student.expected_graduation,
-                            verificationStatus: c.student.verification_status,
-                            profileImage: c.student.profile_image_url,
-                            createdAt: c.student.created_at,
-                            updatedAt: c.student.updated_at
-                        },
-                        university: {
-                            id: c.student.university.id,
-                            name: c.student.university.name,
-                            bankName: c.student.university.bank_name,
-                            accountNumber: c.student.university.account_number,
-                            branchCode: c.student.university.branch_code,
-                            accountName: c.student.university.account_name
-                        }
-                    };
+            if (c) {
+                const mapped: CampaignWithStudent = {
+                    id: c.id,
+                    studentId: c.student_id,
+                    title: c.title,
+                    story: c.story,
+                    goal: c.goal_amount || 0,
+                    raised: c.raised_amount || 0,
+                    donors: c.donors || 0,
+                    daysLeft: 30, // ideally calc
+                    startDate: c.start_date,
+                    endDate: c.end_date,
+                    status: c.status,
+                    type: c.type || (c.is_urgent ? 'quick_assist' : 'standard'),
+                    category: c.category,
+                    isUrgent: c.is_urgent,
+                    fundingBreakdown: c.funding_breakdown || [],
+                    images: c.images,
+                    feeStatementUrl: c.fee_statement_url,
+                    idUrl: c.id_url,
+                    enrollmentUrl: c.enrollment_url,
+                    invoiceUrl: c.invoice_url,
+                    createdAt: c.created_at,
+                    updatedAt: c.updated_at,
+                    student: {
+                        id: c.student.id,
+                        email: c.student.email,
+                        firstName: c.student.first_name,
+                        lastName: c.student.last_name,
+                        phone: c.student.phone,
+                        universityId: c.student.university_id,
+                        studentNumber: c.student.student_number,
+                        course: c.student.course,
+                        yearOfStudy: c.student.year_of_study,
+                        expectedGraduation: c.student.expected_graduation,
+                        verificationStatus: c.student.verification_status,
+                        profileImage: c.student.profile_image_url,
+                        createdAt: c.student.created_at,
+                        updatedAt: c.student.updated_at
+                    },
+                    university: {
+                        id: c.student.university.id,
+                        name: c.student.university.name,
+                        bankName: c.student.university.bank_name,
+                        accountNumber: c.student.university.account_number,
+                        branchCode: c.student.university.branch_code,
+                        accountName: c.student.university.account_name
+                    }
+                };
 
-                    // Calc days left
-                    const end = new Date(mapped.endDate);
-                    const now = new Date();
-                    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    mapped.daysLeft = diff > 0 ? diff : 0;
+                // Calc days left
+                const end = new Date(mapped.endDate);
+                const now = new Date();
+                const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                mapped.daysLeft = diff > 0 ? diff : 0;
 
-                    setCampaign(mapped);
-                }
-            } catch (err) {
-                console.error("Error fetching campaign:", err);
-                setError("Campaign not found or error loading details.");
-            } finally {
-                setLoading(false);
+                setCampaign(mapped);
             }
-        };
+        } catch (err) {
+            console.error("Error fetching campaign:", err);
+            setError("Campaign not found or error loading details.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchCampaign();
     }, [id]);
 
@@ -1113,10 +1113,10 @@ const CampaignDetail: React.FC = () => {
                     amount={selectedAmount}
                     campaign={campaign}
                     onClose={() => setShowPaymentModal(false)}
-                    onSuccess={() => {
-                        // Ideally refresh campaign data
+                    onSuccess={async () => {
                         setShowPaymentModal(false);
                         success("Thank You!", "Your donation has been successfully submitted.");
+                        await fetchCampaign();
                     }}
                 />
             )}
