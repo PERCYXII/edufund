@@ -95,6 +95,12 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign, showFullStory = f
                     </div>
                     <span className="percent-funded">{Math.round(percentFunded)}%</span>
                 </div>
+
+                <div className="campaign-card-action">
+                    <div className="btn-support-now">
+                        Support Student
+                    </div>
+                </div>
             </div>
         </Link>
     );

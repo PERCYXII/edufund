@@ -385,11 +385,11 @@ const CampaignDetail: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [donationAmount, setDonationAmount] = useState<string>('');
+    const [donationAmount, setDonationAmount] = useState<string>('50'); // Default to R50
     const [customAmount, setCustomAmount] = useState<string>('');
     const [showShareTooltip, setShowShareTooltip] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [selectedAmount, setSelectedAmount] = useState(0);
+    const [selectedAmount, setSelectedAmount] = useState(50); // Default to R50
 
     // Document Viewer State
     const [viewerOpen, setViewerOpen] = useState(false);

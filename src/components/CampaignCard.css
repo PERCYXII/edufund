@@ -251,3 +251,29 @@
     color: var(--color-primary-600);
     font-size: var(--font-size-sm);
 }
+
+.campaign-card-action {
+    margin-top: var(--spacing-4);
+    border-top: 1px solid var(--color-gray-100);
+    padding-top: var(--spacing-4);
+}
+
+.btn-support-now {
+    width: 100%;
+    background: var(--color-primary-600);
+    color: white;
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.campaign-card:hover .btn-support-now {
+    background: var(--color-primary-700);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
