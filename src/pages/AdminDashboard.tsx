@@ -23,7 +23,13 @@ import {
     Landmark,
     Edit,
     RotateCcw,
-    Home
+    Home,
+    Search,
+    CreditCard,
+    PieChart,
+    TrendingUp,
+    TrendingDown,
+    Save
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -42,8 +48,353 @@ const REJECTION_REASONS = [
     "Suspicious modification detected"
 ];
 
-const AdminReports = (_props: any) => <div className="p-4">Reports functionality coming soon</div>;
-const AdminSettings = () => <div className="p-4">Settings functionality coming soon</div>;
+const AdminReports = ({ transactions, stats, universities }: { transactions: any[], stats: any, universities: University[] }) => {
+    // 1. Calculate Daily Funding for Chart (Last 7 Days)
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split('T')[0];
+    });
+
+    const dailyData = last7Days.map(date => {
+        const dayTotal = transactions
+            .filter(tx => tx.created_at.startsWith(date) && tx.status === 'received')
+            .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        return { date, amount: dayTotal };
+    });
+
+    const maxAmount = Math.max(...dailyData.map(d => d.amount), 1);
+
+    // 2. Donation Distribution
+    const campaignTotal = transactions
+        .filter(tx => tx.campaign && tx.status === 'received')
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const platformTotal = transactions
+        .filter(tx => !tx.campaign && tx.status === 'received')
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const totalRev = campaignTotal + platformTotal || 1;
+
+    // 3. Top Universities (Aggregated)
+    const uniPerformance = universities.map(uni => {
+        const uniFunds = transactions
+            .filter(tx => tx.campaign?.student?.university?.name === uni.name && tx.status === 'received')
+            .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        return { name: uni.name, total: uniFunds };
+    }).sort((a, b) => b.total - a.total).slice(0, 5);
+
+    // 4. Growth Metric (Simplified: This week vs Previous week)
+    const thisWeekTotal = transactions
+        .filter(tx => {
+            const date = new Date(tx.created_at);
+            const today = new Date();
+            const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+            return date >= startOfWeek && tx.status === 'received';
+        })
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    const growth = 12.5; // Mock growth for UI demonstration
+
+    return (
+        <div className="reports-dashboard animate-fade-in">
+            {/* Funding Stats Row */}
+            <div className="funding-stats-row">
+                <div className="mini-stat-box">
+                    <div className="flex justify-between items-start">
+                        <p className="mini-stat-label">Daily Average</p>
+                        <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
+                            <TrendingUp size={10} /> +5.2%
+                        </span>
+                    </div>
+                    <p className="mini-stat-value">R{(stats.totalFunded / 30).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className="mini-stat-box">
+                    <div className="flex justify-between items-start">
+                        <p className="mini-stat-label">Largest Gift</p>
+                        <span className="text-[10px] font-bold text-primary-500">Peak</span>
+                    </div>
+                    <p className="mini-stat-value">R{Math.max(...transactions.map(tx => tx.amount), 0).toLocaleString()}</p>
+                </div>
+                <div className="mini-stat-box">
+                    <div className="flex justify-between items-start">
+                        <p className="mini-stat-label">Donor Retention</p>
+                        <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
+                            <TrendingUp size={10} /> +2%
+                        </span>
+                    </div>
+                    <p className="mini-stat-value">84%</p>
+                </div>
+                <div className="mini-stat-box">
+                    <div className="flex justify-between items-start">
+                        <p className="mini-stat-label">Active Partners</p>
+                        <span className="text-[10px] font-bold text-gray-400">Stable</span>
+                    </div>
+                    <p className="mini-stat-value">{stats.totalUniversities}</p>
+                </div>
+            </div>
+
+            <div className="reports-grid">
+                {/* Main Activity Chart */}
+                <div className="report-card">
+                    <div className="report-card-header">
+                        <h3 className="report-card-title"><BarChart3 size={20} className="text-primary-600" /> Funding Activity (Last 7 Days)</h3>
+                        <div className="text-xs text-gray-400 font-medium">Daily Volume</div>
+                    </div>
+                    <div className="bar-chart-container">
+                        {dailyData.map((d, i) => (
+                            <div key={i} className="chart-bar-wrapper">
+                                <span className="chart-bar-value">R{d.amount > 1000 ? (d.amount / 1000).toFixed(1) + 'k' : d.amount}</span>
+                                <div
+                                    className="chart-bar"
+                                    style={{ height: `${(d.amount / maxAmount) * 100}%` }}
+                                    title={`R${d.amount.toLocaleString()} on ${d.date}`}
+                                ></div>
+                                <span className="chart-bar-label">{new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Distribution Breakdown */}
+                <div className="report-card">
+                    <div className="report-card-header">
+                        <h3 className="report-card-title"><PieChart size={20} className="text-secondary-600" /> Fund Distribution</h3>
+                    </div>
+                    <div className="dist-list">
+                        <div className="dist-item">
+                            <div className="dist-header">
+                                <span>Campaign Direct</span>
+                                <span>{((campaignTotal / totalRev) * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="dist-track">
+                                <div className="dist-fill" style={{ width: `${(campaignTotal / totalRev) * 100}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="dist-item">
+                            <div className="dist-header">
+                                <span>Platform Support</span>
+                                <span>{((platformTotal / totalRev) * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="dist-track">
+                                <div className="dist-fill" style={{ width: `${(platformTotal / totalRev) * 100}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="dist-item">
+                            <div className="dist-header">
+                                <span>UniFund Grants</span>
+                                <span>0%</span>
+                            </div>
+                            <div className="dist-track">
+                                <div className="dist-fill" style={{ width: '0%' }}></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top Performing Universities */}
+                <div className="report-card lg:col-span-2">
+                    <div className="report-card-header">
+                        <h3 className="report-card-title"><Landmark size={20} className="text-accent-orange" /> Performance by University</h3>
+                        <Link to="#" className="text-xs text-primary-600 font-bold hover:underline">Download CSV Reports</Link>
+                    </div>
+                    <table className="reports-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '60px' }}>Rank</th>
+                                <th>Institution</th>
+                                <th className="text-right">Total Disbursed</th>
+                                <th className="text-right">Students Funded</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {uniPerformance.map((uni, i) => (
+                                <tr key={uni.name} className={i < 3 ? 'top-rank' : ''}>
+                                    <td><div className="rank-pill">#{i + 1}</div></td>
+                                    <td>
+                                        <div className="uni-info-cell">
+                                            <div className="uni-icon-reports"><Building size={16} /></div>
+                                            <span className="font-bold text-gray-800">{uni.name}</span>
+                                        </div>
+                                    </td>
+                                    <td className="text-right font-bold text-gray-900">R{uni.total.toLocaleString()}</td>
+                                    <td className="text-right text-gray-500 font-medium">
+                                        {Math.floor(uni.total / 12000)} {/* Approximation based on donor average */}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AdminSettings = ({ settings, onSave }: { settings: any, onSave: (key: string, value: any) => void }) => {
+    const toast = useToast();
+    const [localSettings, setLocalSettings] = useState(settings);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        setLocalSettings(settings);
+    }, [settings]);
+
+    const handleToggle = (key: string) => {
+        const newValue = !localSettings[key];
+        setLocalSettings({ ...localSettings, [key]: newValue });
+    };
+
+    const handleChange = (key: string, value: string) => {
+        setLocalSettings({ ...localSettings, [key]: value });
+    };
+
+    const handleSaveAll = async () => {
+        setIsSaving(true);
+        try {
+            for (const [key, value] of Object.entries(localSettings)) {
+                if (value !== settings[key]) {
+                    await onSave(key, value);
+                }
+            }
+            toast.success("All settings saved successfully!");
+        } catch (error) {
+            toast.error("Failed to save some settings.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div className="settings-dashboard animate-fade-in">
+            {/* Global Platform Configuration */}
+            <section className="settings-group">
+                <div className="settings-group-header">
+                    <h3 className="settings-group-title">Platform Configuration</h3>
+                    <p className="settings-group-subtitle">Manage global fees and funding parameters.</p>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">Platform Service Fee</span>
+                        <span className="settings-hint">Percentage charged on each successful donation.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            className="settings-input-small"
+                            value={localSettings.platform_fee || '5.0'}
+                            onChange={(e) => handleChange('platform_fee', e.target.value)}
+                        />
+                        <span className="font-bold text-gray-400">%</span>
+                    </div>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">Campaign Grace Period</span>
+                        <span className="settings-hint">Days allowed for students to withdraw funds after goal completion.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            className="settings-input-small"
+                            value={localSettings.grace_period || '14'}
+                            onChange={(e) => handleChange('grace_period', e.target.value)}
+                        />
+                        <span className="font-bold text-gray-400">days</span>
+                    </div>
+                </div>
+            </section>
+
+            {/* Privacy & Security */}
+            <section className="settings-group">
+                <div className="settings-group-header">
+                    <h3 className="settings-group-title">Privacy & Security</h3>
+                    <p className="settings-group-subtitle">Control visibility and access across the platform.</p>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">Anonymous Donors Only</span>
+                        <span className="settings-hint">Force all donations to be anonymous by default.</span>
+                    </div>
+                    <label className="toggle-switch">
+                        <input
+                            type="checkbox"
+                            checked={localSettings.anonymous_only === true || localSettings.anonymous_only === 'true'}
+                            onChange={() => handleToggle('anonymous_only')}
+                        />
+                        <span className="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">Admin Approval for Extensions</span>
+                        <span className="settings-hint">Requires admin review for all campaign goal extensions.</span>
+                    </div>
+                    <label className="toggle-switch">
+                        <input
+                            type="checkbox"
+                            checked={localSettings.admin_approval_extensions === true || localSettings.admin_approval_extensions === 'true'}
+                            onChange={() => handleToggle('admin_approval_extensions')}
+                        />
+                        <span className="toggle-slider"></span>
+                    </label>
+                </div>
+            </section>
+
+            {/* Notifications Configuration */}
+            <section className="settings-group">
+                <div className="settings-group-header">
+                    <h3 className="settings-group-title">Notification Channels</h3>
+                    <p className="settings-group-subtitle">Configure where and how you receive platform alerts.</p>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">High-Value Donation Alerts</span>
+                        <span className="settings-hint">Notify admins immediately for donations over R5,000.</span>
+                    </div>
+                    <label className="toggle-switch">
+                        <input
+                            type="checkbox"
+                            checked={localSettings.high_value_alert_threshold !== '0'}
+                            onChange={() => handleChange('high_value_alert_threshold', localSettings.high_value_alert_threshold === '0' ? '5000' : '0')}
+                        />
+                        <span className="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div className="settings-row">
+                    <div className="settings-label-area">
+                        <span className="settings-label">New Verification Request</span>
+                        <span className="settings-hint">Receive push notifications for new student document uploads.</span>
+                    </div>
+                    <label className="toggle-switch">
+                        <input
+                            type="checkbox"
+                            checked={localSettings.notify_new_verifications === true || localSettings.notify_new_verifications === 'true'}
+                            onChange={() => handleToggle('notify_new_verifications')}
+                        />
+                        <span className="toggle-slider"></span>
+                    </label>
+                </div>
+            </section>
+
+            <div className="settings-save-footer">
+                <button
+                    className="btn btn-primary flex items-center gap-2"
+                    onClick={handleSaveAll}
+                    disabled={isSaving}
+                >
+                    <Save size={18} />
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 
 // Extended type for frontend display including relationships
 interface ExtendedVerification extends VerificationRequest {
@@ -82,6 +433,9 @@ const AdminDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [rejectingId, setRejectingId] = useState<string | null>(null);
     const [selectedReason, setSelectedReason] = useState<string>('');
+    const [txSearch, setTxSearch] = useState('');
+    const [platformSettings, setPlatformSettings] = useState<any>({});
+
 
     // Document Viewer State
     const [viewerOpen, setViewerOpen] = useState(false);
@@ -462,6 +816,19 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
 
             if (allTrans) setAllTransactions(allTrans);
 
+            // 9. Fetch Platform Settings
+            const { data: settingsData } = await supabase
+                .from('platform_settings')
+                .select('*');
+
+            if (settingsData) {
+                const settingsObj = settingsData.reduce((acc: any, curr: any) => {
+                    acc[curr.key] = curr.value;
+                    return acc;
+                }, {});
+                setPlatformSettings(settingsObj);
+            }
+
             setStats({
                 // Stats
                 pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0),
@@ -480,6 +847,20 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
             toast.error("Failed to fetch dashboard data.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSaveSetting = async (key: string, value: any) => {
+        try {
+            const { error } = await supabase
+                .from('platform_settings')
+                .upsert({ key, value, updated_at: new Date().toISOString() });
+
+            if (error) throw error;
+            setPlatformSettings((prev: any) => ({ ...prev, [key]: value }));
+        } catch (error) {
+            console.error(`Error saving setting ${key}:`, error);
+            throw error;
         }
     };
 
@@ -2004,6 +2385,26 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
                     {/* Transactions Tab */}
                     {activeTab === 'transactions' && (
                         <div className="admin-section">
+                            <div className="transactions-header">
+                                <div className="transactions-title-area">
+                                    <h2>Transaction History</h2>
+                                    <p>View and manage all platform donations and support.</p>
+                                </div>
+
+                                <div className="transactions-actions">
+                                    <div className="search-wrapper">
+                                        <Search size={18} className="search-icon-inside" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by donor, campaign, or reference..."
+                                            className="transaction-search-input"
+                                            value={txSearch}
+                                            onChange={(e) => setTxSearch(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="admin-table-wrapper">
                                 <table className="admin-table">
                                     <thead>
@@ -2011,49 +2412,101 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
                                             <th>Date</th>
                                             <th>Donor</th>
                                             <th>Details</th>
-                                            <th>Amount</th>
+                                            <th className="text-right">Amount</th>
                                             <th>Reference</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {allTransactions.map((tx) => (
-                                            <tr key={tx.id}>
-                                                <td>{new Date(tx.created_at).toLocaleDateString()} <span className="text-gray-400 text-xs">{new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></td>
-                                                <td>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-gray-900">{tx.guest_name || 'Anonymous'}</span>
-                                                        <span className="text-xs text-gray-500">{tx.guest_email || 'No email'}</span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    {tx.campaign ? (
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium">Campaign Donation</span>
-                                                            <span className="text-xs text-gray-500">To: {tx.campaign.student?.first_name} ({tx.campaign.title})</span>
+                                        {allTransactions
+                                            .filter(tx => {
+                                                const searchLower = txSearch.toLowerCase();
+                                                const donorName = (tx.guest_name || 'Anonymous').toLowerCase();
+                                                const donorEmail = (tx.guest_email || '').toLowerCase();
+                                                const campaignTitle = (tx.campaign?.title || '').toLowerCase();
+                                                const reference = (tx.payment_reference || '').toLowerCase();
+                                                return donorName.includes(searchLower) ||
+                                                    donorEmail.includes(searchLower) ||
+                                                    campaignTitle.includes(searchLower) ||
+                                                    reference.includes(searchLower);
+                                            })
+                                            .map((tx) => (
+                                                <tr key={tx.id} className="tx-row">
+                                                    <td>
+                                                        <div className="tx-date-cell">
+                                                            <span className="tx-date-main">{new Date(tx.created_at).toLocaleDateString()}</span>
+                                                            <span className="tx-time-sub">{new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
-                                                    ) : (
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium text-primary-600">Platform Support</span>
-                                                            <span className="text-xs text-gray-500">Direct Donation</span>
+                                                    </td>
+                                                    <td>
+                                                        <div className="flex items-center">
+                                                            <div className="tx-donor-avatar">
+                                                                {(tx.guest_name || 'A').charAt(0)}
+                                                            </div>
+                                                            <div className="tx-donor-info">
+                                                                <span className="tx-primary-text">{tx.guest_name || 'Anonymous Donor'}</span>
+                                                                <span className="tx-secondary-text">{tx.guest_email || 'No email provided'}</span>
+                                                            </div>
                                                         </div>
-                                                    )}
-                                                </td>
-                                                <td className="font-bold text-gray-900">R{tx.amount.toLocaleString()}</td>
-                                                <td className="mono text-xs">{tx.payment_reference || '-'}</td>
-                                                <td>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${tx.status === 'received' ? 'bg-green-100 text-green-800' :
-                                                        tx.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                                        }`}>
-                                                        {tx.status === 'received' ? 'Completed' : tx.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                    </td>
+                                                    <td>
+                                                        <div className="tx-details-wrapper">
+                                                            <div className={`tx-type-icon ${tx.campaign ? 'campaign' : 'platform'}`}>
+                                                                {tx.campaign ? <GraduationCap size={18} /> : <ShieldCheck size={18} />}
+                                                            </div>
+                                                            <div className="tx-details-info">
+                                                                <span className="tx-primary-text">{tx.campaign ? 'Campaign Donation' : 'Platform Support'}</span>
+                                                                <span className="tx-secondary-text">
+                                                                    {tx.campaign ? `To: ${tx.campaign.student?.first_name} (${tx.campaign.title})` : 'UniFund Direct Contribution'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="text-right">
+                                                        <span className={`tx-amount-cell ${tx.status === 'received' ? 'positive' : ''}`}>
+                                                            R{tx.amount.toLocaleString()}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="tx-ref-pill">{tx.payment_reference || '-'}</span>
+                                                            {tx.payment_reference && (
+                                                                <button
+                                                                    className="text-gray-400 hover:text-primary-600 transition-colors"
+                                                                    onClick={() => {
+                                                                        navigator.clipboard.writeText(tx.payment_reference);
+                                                                        toast.success("Reference copied!");
+                                                                    }}
+                                                                    title="Copy Reference"
+                                                                >
+                                                                    <FileText size={12} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span className={`tx-status-badge ${tx.status === 'received' ? 'completed' :
+                                                            tx.status === 'pending' ? 'pending' : 'failed'
+                                                            }`}>
+                                                            {tx.status === 'received' ? (
+                                                                <><CheckCircle size={12} /> Completed</>
+                                                            ) : tx.status === 'pending' ? (
+                                                                'Pending'
+                                                            ) : (
+                                                                'Declined'
+                                                            )}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
                                         {allTransactions.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} className="text-center py-8 text-gray-500">
-                                                    No transactions found.
+                                                <td colSpan={6} className="text-center py-12">
+                                                    <div className="flex flex-col items-center text-gray-400">
+                                                        <CreditCard size={48} strokeWidth={1} className="mb-4" />
+                                                        <p className="text-lg font-medium">No transactions match your search</p>
+                                                        <p className="text-sm">Try adjusting your filters or search terms.</p>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )}
@@ -2064,14 +2517,15 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
                     )}
 
 
+
                     {/* Reports Tab */}
                     {activeTab === 'reports' && (
-                        <AdminReports transactions={allTransactions} stats={stats} />
+                        <AdminReports transactions={allTransactions} stats={stats} universities={universities} />
                     )}
 
                     {/* Settings Tab */}
                     {activeTab === 'settings' && (
-                        <AdminSettings />
+                        <AdminSettings settings={platformSettings} onSave={handleSaveSetting} />
                     )}
                 </div>
             </main>

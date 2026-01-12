@@ -17,6 +17,8 @@ export interface University {
   postalAddress?: string;
   contactPerson?: string;
   viceChancellor?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UniversityApplicationFee {

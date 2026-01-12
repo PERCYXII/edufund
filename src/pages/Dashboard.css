@@ -1259,3 +1259,175 @@
     background: var(--color-error-100);
     color: var(--color-error-700);
 }
+
+/* Premium Dashboard Additions */
+.premium-card {
+    background: white;
+    border-radius: var(--radius-2xl);
+    border: 1px solid var(--color-gray-100);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    transition: all var(--transition-normal);
+    overflow: hidden;
+}
+
+.premium-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+    border-color: var(--color-primary-100);
+}
+
+.glass-header {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-gray-100);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Enhanced Progress Bar */
+.premium-progress-container {
+    height: 12px;
+    background: var(--color-gray-100);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+    margin: var(--spacing-4) 0;
+}
+
+.premium-progress-fill {
+    height: 100%;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+    position: relative;
+    transition: width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.premium-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.2) 50%,
+            rgba(255, 255, 255, 0) 100%);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Action Grid for Student */
+.student-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-4);
+}
+
+.action-card-mini {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-6);
+    background: var(--color-gray-50);
+    border: 1px solid var(--color-gray-100);
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-decoration: none;
+    color: var(--color-gray-700);
+}
+
+.action-card-mini:hover {
+    background: white;
+    border-color: var(--color-primary-500);
+    color: var(--color-primary-600);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.action-icon-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-full);
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--spacing-3);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-fast);
+}
+
+.action-card-mini:hover .action-icon-circle {
+    background: var(--color-primary-500);
+    color: white;
+}
+
+/* Empty Campaign Placeholder */
+.empty-campaign-premium {
+    padding: var(--spacing-16);
+    background: linear-gradient(135deg, white 0%, var(--color-primary-50) 100%);
+    border-radius: var(--radius-2xl);
+    text-align: center;
+    border: 2px dashed var(--color-primary-200);
+}
+
+.empty-campaign-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-6);
+    opacity: 0.8;
+}
+
+/* Share Section */
+.share-floating-panel {
+    display: flex;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    background: white;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--color-gray-100);
+}
+
+.social-button-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: transform 0.2s;
+}
+
+.social-button-circle:hover {
+    transform: scale(1.1);
+}
+
+.social-button-circle.facebook {
+    background: #1877F2;
+}
+
+.social-button-circle.twitter {
+    background: #1DA1F2;
+}
+
+.social-button-circle.whatsapp {
+    background: #25D366;
+}
+
+.social-button-circle.link {
+    background: var(--color-gray-700);
+}

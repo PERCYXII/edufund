@@ -34,6 +34,7 @@ import {
     ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
@@ -54,6 +55,7 @@ interface DashboardDonation {
 
 const StudentDashboard: React.FC = () => {
     const { user, isLoading: authLoading, logout, notifications, refreshUser } = useAuth();
+    const toast = useToast();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<string>('overview');
     const [showNotifications, setShowNotifications] = useState(false);
@@ -211,7 +213,6 @@ const StudentDashboard: React.FC = () => {
                         accountNumber: uni.account_number,
                         branchCode: uni.branch_code,
                         accountName: uni.account_name,
-                        createdAt: uni.created_at,
                         updatedAt: uni.updated_at
                     };
                     setUniversity(mappedUniversity);
@@ -262,14 +263,14 @@ const StudentDashboard: React.FC = () => {
 
             if (updateError) throw updateError;
 
-            alert('Profile image updated successfully!');
+            toast.success('Profile image updated successfully!');
             await refreshUser(); // Refresh user context to show new image
             await fetchVerificationStatus(); // Refresh status
             await fetchDashboardData(); // Refresh campaign data
 
         } catch (error: any) {
             console.error('Error uploading image:', error);
-            alert('Error updating profile image: ' + error.message);
+            toast.error('Error updating profile image: ' + error.message);
         } finally {
             setImageUploading(false);
         }
@@ -291,12 +292,12 @@ const StudentDashboard: React.FC = () => {
                 setCampaign(null);
                 await refreshUser();
 
-                alert("Campaign deleted successfully.");
+                toast.success("Campaign deleted successfully.");
                 setActiveTab('overview');
 
             } catch (error: any) {
                 console.error("Error deleting campaign:", error);
-                alert("Failed to delete campaign: " + error.message);
+                toast.error("Failed to delete campaign: " + error.message);
             }
         }
     };
@@ -316,12 +317,12 @@ const StudentDashboard: React.FC = () => {
 
             if (error) throw error;
 
-            alert("Campaign extended successfully!");
+            toast.success("Campaign extended successfully!");
             setShowExtendModal(false);
             await fetchDashboardData();
         } catch (err: any) {
             console.error("Error extending campaign:", err);
-            alert("Failed to extend: " + err.message);
+            toast.error("Failed to extend: " + err.message);
         } finally {
             setIsExtending(false);
         }
@@ -659,13 +660,8 @@ const StudentDashboard: React.FC = () => {
                                     )}
 
                                     {/* Stats Cards */}
-                                    <div className="stats-grid">
-                                        <div
-                                            className="stat-card primary"
-                                            onClick={() => setActiveTab('campaign')}
-                                            style={{ cursor: 'pointer' }}
-                                            title="View Campaign Details"
-                                        >
+                                    <div className="stats-grid animate-fade-in">
+                                        <div className="stat-card primary premium-card">
                                             <div className="stat-icon">
                                                 <DollarSign size={24} />
                                             </div>
@@ -676,7 +672,7 @@ const StudentDashboard: React.FC = () => {
                                         </div>
 
                                         <div
-                                            className="stat-card success"
+                                            className="stat-card success premium-card"
                                             onClick={handleShowDonors}
                                             style={{ cursor: 'pointer' }}
                                             title="View Donor List"
@@ -691,7 +687,7 @@ const StudentDashboard: React.FC = () => {
                                         </div>
 
                                         <div
-                                            className="stat-card warning"
+                                            className="stat-card warning premium-card"
                                             onClick={() => setActiveTab('campaign')}
                                             style={{ cursor: 'pointer' }}
                                             title="View Campaign Details"
@@ -706,7 +702,7 @@ const StudentDashboard: React.FC = () => {
                                         </div>
 
                                         <div
-                                            className="stat-card info"
+                                            className="stat-card info premium-card"
                                             onClick={() => setShowExtendModal(true)}
                                             style={{ cursor: 'pointer' }}
                                             title="Click to extend campaign duration"
@@ -716,37 +712,50 @@ const StudentDashboard: React.FC = () => {
                                             </div>
                                             <div className="stat-info">
                                                 <span className="stat-value">{campaign.daysLeft || 0}</span>
-                                                <span className="stat-label">Days Left (Extend)</span>
+                                                <span className="stat-label">Days Left</span>
                                             </div>
                                         </div>
                                     </div>
 
+
                                     {/* Rest of Overview Content */}
-                                    <div className="card">
+                                    <div className="premium-card">
                                         <div className="card-header">
-                                            <h2 className="card-title">Campaign Progress</h2>
+                                            <h2 className="card-title">Goal Progress</h2>
                                             <Link to={`/campaign/${campaign.id}`} className="card-link">
                                                 <Eye size={18} /> View Campaign
                                             </Link>
                                         </div>
                                         <div className="card-body">
-                                            <div className="progress-section">
-                                                <div className="progress-header">
+                                            <div className="progress-header">
+                                                <div>
                                                     <span className="progress-raised">R{(campaign.raised || 0).toLocaleString()}</span>
-                                                    <span className="progress-goal">of R{(campaign.goal || 0).toLocaleString()}</span>
+                                                    <p className="text-sm text-gray-500 mt-1">Raised of R{(campaign.goal || 0).toLocaleString()}</p>
                                                 </div>
-                                                <div className="progress-bar large">
-                                                    <div
-                                                        className="progress-bar-fill"
-                                                        style={{ width: `${percentFunded}%` }}
-                                                    />
+                                                <div className="text-right">
+                                                    <span className="text-2xl font-bold text-primary-600">{percentFunded}%</span>
+                                                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Funded</p>
                                                 </div>
-                                                <p className="progress-remaining">
-                                                    R{Math.max(0, (campaign.goal || 0) - (campaign.raised || 0)).toLocaleString()} still needed to reach your goal
+                                            </div>
+
+                                            <div className="premium-progress-container">
+                                                <div
+                                                    className="premium-progress-fill"
+                                                    style={{ width: `${percentFunded}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex justify-between items-center mt-4">
+                                                <p className="text-sm text-gray-600">
+                                                    <span className="font-bold text-gray-900">R{Math.max(0, (campaign.goal || 0) - (campaign.raised || 0)).toLocaleString()}</span> needed to complete
                                                 </p>
+                                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${campaign.daysLeft > 5 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {campaign.daysLeft} days left
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
+
 
                                     {/* Share, Recent Donations sections... */}
                                     {/* Note: I am not repeating the whole file content here as I only need to target replace/insert. 
@@ -754,22 +763,22 @@ const StudentDashboard: React.FC = () => {
                                             However, since the file is large, I'll return the modified chunks properly.
                                         */}
 
-                                    <div className="card">
+                                    <div className="premium-card">
                                         <div className="card-header">
-                                            <h2 className="card-title">Share Your Campaign</h2>
+                                            <h2 className="card-title">Share Your Success</h2>
                                         </div>
                                         <div className="card-body">
-                                            <p className="mb-4 text-gray-600">
-                                                Share your campaign link with friends, family, and on social media to reach more potential donors.
+                                            <p className="mb-6 text-gray-600">
+                                                Personal sharing is the #1 way to get funded. Use these buttons to quickly spread the word.
                                             </p>
-                                            <div className="share-link-group" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                                <div className="amount-input-wrapper" style={{ flex: 1, marginBottom: 0, minWidth: '200px' }}>
-                                                    <LinkIcon size={18} className="currency-prefix" style={{ color: '#64748b' }} />
+                                            <div className="share-link-group mb-6" style={{ display: 'flex', gap: '10px' }}>
+                                                <div className="flex-1 relative">
+                                                    <LinkIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                                     <input
                                                         type="text"
                                                         readOnly
                                                         className="form-input"
-                                                        style={{ paddingLeft: '40px' }}
+                                                        style={{ paddingLeft: '40px', fontSize: '13px' }}
                                                         value={`${window.location.origin}/campaign/${campaign.id}`}
                                                         onClick={(e) => (e.target as HTMLInputElement).select()}
                                                     />
@@ -779,47 +788,53 @@ const StudentDashboard: React.FC = () => {
                                                     onClick={() => {
                                                         const url = `${window.location.origin}/campaign/${campaign.id}`;
                                                         navigator.clipboard.writeText(url);
-                                                        alert("Campaign link copied to clipboard!");
+                                                        toast.success("Link copied!");
                                                     }}
                                                 >
-                                                    <Share2 size={18} />
-                                                    <span>Copy Link</span>
+                                                    <Share2 size={16} />
+                                                    <span className="hidden sm:inline">Copy</span>
                                                 </button>
                                             </div>
-                                            <div className="share-social-links" style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+
+                                            <div className="share-floating-panel">
                                                 <a
                                                     href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="btn btn-secondary"
-                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    className="social-button-circle facebook"
                                                     title="Share on Facebook"
                                                 >
-                                                    <Facebook size={20} style={{ color: '#1877F2' }} />
+                                                    <Facebook size={20} fill="white" />
                                                 </a>
                                                 <a
-                                                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}&text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title}`)}`}
+                                                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}&text=${encodeURIComponent(`Please help me reach my study goal on UniFund!`)}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="btn btn-secondary"
-                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    className="social-button-circle twitter"
                                                     title="Share on Twitter"
                                                 >
-                                                    <Twitter size={20} style={{ color: '#1DA1F2' }} />
+                                                    <Twitter size={20} fill="white" />
                                                 </a>
                                                 <a
-                                                    href={`https://wa.me/?text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title} ${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                    href={`https://wa.me/?text=${encodeURIComponent(`Hi! Please check out my funding campaign on UniFund: ${campaign.title} - ${window.location.origin}/campaign/${campaign.id}`)}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="btn btn-secondary"
-                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    className="social-button-circle whatsapp"
                                                     title="Share on WhatsApp"
                                                 >
-                                                    <MessageSquare size={20} style={{ color: '#25D366' }} />
+                                                    <MessageSquare size={20} fill="white" />
+                                                </a>
+                                                <a
+                                                    href={`mailto:?subject=${encodeURIComponent(`Support my education on UniFund`)}&body=${encodeURIComponent(`Hi, I'm raising funds for my studies: ${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                    className="social-button-circle link"
+                                                    title="Share via Email"
+                                                >
+                                                    <Bell size={20} />
                                                 </a>
                                             </div>
                                         </div>
                                     </div>
+
 
                                     <div className="card">
                                         <div className="card-header">
@@ -1180,10 +1195,10 @@ const StudentDashboard: React.FC = () => {
                                                             })
                                                             .eq('id', user.id);
                                                         if (error) throw error;
-                                                        alert("Settings saved!");
+                                                        toast.success("Settings saved!");
                                                         await refreshUser();
                                                     } catch (err: any) {
-                                                        alert("Failed to save: " + err.message);
+                                                        toast.error("Failed to save: " + err.message);
                                                     } finally {
                                                         setSavingSettings(false);
                                                     }
@@ -1618,16 +1633,16 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             }
 
             if (isEditing) {
-                alert("Campaign updated successfully!");
+                toast.success("Campaign updated successfully!");
             } else {
-                alert("Campaign submitted successfully! Your campaign is now pending review by our team. You will be notified once it's approved and goes live.");
+                toast.success("Campaign submitted successfully! Your campaign is now pending review by our team.");
             }
             onSuccess();
 
 
         } catch (error: any) {
             console.error("Error processing campaign:", error);
-            alert("Operation failed: " + error.message);
+            toast.error("Operation failed: " + error.message);
         } finally {
             setSubmitting(false);
         }
