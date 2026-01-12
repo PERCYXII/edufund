@@ -28,7 +28,6 @@ import {
     CreditCard,
     PieChart,
     TrendingUp,
-    TrendingDown,
     Save
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -118,15 +117,15 @@ const AdminReports = ({ transactions, stats, universities }: { transactions: any
                     <div className="flex justify-between items-start">
                         <p className="mini-stat-label">Donor Retention</p>
                         <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
-                            <TrendingUp size={10} /> +2%
+                            <TrendingUp size={10} /> {growth}%
                         </span>
                     </div>
                     <p className="mini-stat-value">84%</p>
                 </div>
                 <div className="mini-stat-box">
                     <div className="flex justify-between items-start">
-                        <p className="mini-stat-label">Active Partners</p>
-                        <span className="text-[10px] font-bold text-gray-400">Stable</span>
+                        <p className="mini-stat-label">Weekly Activity</p>
+                        <span className="text-[10px] font-bold text-gray-400">R{thisWeekTotal.toLocaleString()}</span>
                     </div>
                     <p className="mini-stat-value">{stats.totalUniversities}</p>
                 </div>

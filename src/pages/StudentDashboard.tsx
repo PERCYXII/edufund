@@ -1391,6 +1391,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     initialData,
     isEditing = false
 }) => {
+    const toast = useToast();
     const [step, setStep] = useState(0); // Always start at 0 to allow type selection check
     const [campaignType, setCampaignType] = useState<'standard' | 'quick'>(
         initialData?.type || (initialData?.isUrgent ? 'quick' : 'standard')
