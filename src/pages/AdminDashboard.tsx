@@ -1,50 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import AdminReports from '../components/AdminReports';
-import AdminSettings from '../components/AdminSettings';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-    Home,
     Users,
-    GraduationCap,
-    Building,
     DollarSign,
-    BarChart3,
-    Settings,
-    Bell,
-
-    FileText,
     CheckCircle,
     XCircle,
-    LogOut,
+    FileText,
+    Trash2,
     Eye,
+    Bell,
+    Settings,
+    LayoutDashboard,
+    LogOut,
+    Archive,
+    Building,
+    BarChart3,
+    Menu,
+    ArrowLeft,
+    ShieldCheck,
+    GraduationCap,
     User,
     Landmark,
-    Trash2,
     Edit,
-    Archive,
     RotateCcw,
-    LayoutDashboard,
-    ShieldCheck,
-    ArrowLeft,
-    Menu
+    Home
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import NotificationsDropdown from '../components/NotificationsDropdown';
 import { supabase } from '../lib/supabase';
-import type { VerificationRequest, Student, University, CampaignWithStudent } from '../types';
-import DocumentViewerModal from '../components/DocumentViewerModal';
+import type { CampaignWithStudent, University, Student, VerificationRequest } from '../types';
 import './AdminDashboard.css';
+import NotificationsDropdown from '../components/NotificationsDropdown';
+import DocumentViewerModal from '../components/DocumentViewerModal';
 
 const REJECTION_REASONS = [
-    "Details don't match name",
-    "Details don't match student number",
-    "Details don't match university name",
-    "Details don't match email",
-    "Documents are unclear/unreadable",
-    "Documents are not certified",
-    "Incomplete documentation"
+    "Illegible document",
+    "Outdated document",
+    "Missing student name/number",
+    "Document does not match type",
+    "Incomplete document",
+    "Suspicious modification detected"
 ];
+
+const AdminReports = (_props: any) => <div className="p-4">Reports functionality coming soon</div>;
+const AdminSettings = () => <div className="p-4">Settings functionality coming soon</div>;
 
 // Extended type for frontend display including relationships
 interface ExtendedVerification extends VerificationRequest {
@@ -53,7 +52,7 @@ interface ExtendedVerification extends VerificationRequest {
 
 const AdminDashboard: React.FC = () => {
     const { user, isLoading: authLoading, logout } = useAuth();
-    const toast = useToast(); // Use the hook directly as 'toast' so toast.success() works
+    const toast = useToast();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [showNotificationsList, setShowNotificationsList] = useState(false);
@@ -65,7 +64,6 @@ const AdminDashboard: React.FC = () => {
     const [recentCampaigns, setRecentCampaigns] = useState<CampaignWithStudent[]>([]);
     const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([]);
     const [pendingDonations, setPendingDonations] = useState<any[]>([]);
-    const [pendingMilestones, setPendingMilestones] = useState<any[]>([]);
     const [allTransactions, setAllTransactions] = useState<any[]>([]); // New state for transactions tab
     const [universities, setUniversities] = useState<University[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
@@ -76,7 +74,10 @@ const AdminDashboard: React.FC = () => {
         activeCampaigns: 0,
         totalFunded: 0,
         totalUniversities: 0,
-        disabledCount: 0
+        disabledCount: 0,
+        totalDonors: 0,
+        fundedStudentsCount: 0,
+        fundingPercentage: 0
     });
     const [loading, setLoading] = useState(true);
     const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -108,7 +109,7 @@ const AdminDashboard: React.FC = () => {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'notifications',
-                    filter: `user_id=eq.${user.id}`
+                    filter: `user_id = eq.${user.id} `
                 }, (payload) => {
                     setAdminNotifications(prev => [payload.new, ...prev]);
                 })
@@ -181,15 +182,15 @@ const AdminDashboard: React.FC = () => {
             const { data: donationsData } = await supabase
                 .from('donations')
                 .select(`
-                *,
-                campaign:campaigns (
-                    title,
-                    student:students (
-                        first_name, last_name
-                    )
-                )
-            `)
-                .eq('status', 'pending')
+    *,
+    campaign: campaigns(
+        title,
+        student: students(
+            first_name, last_name
+        )
+    )
+        `)
+                .eq('payment_status', 'pending')
                 .order('created_at', { ascending: true });
 
             setPendingDonations(donationsData || []);
@@ -197,32 +198,17 @@ const AdminDashboard: React.FC = () => {
             const { data: verifData, error: verifError } = await supabase
                 .from('verification_requests')
                 .select(`
-                    id, student_id, document_type, document_url, id_url, enrollment_url, academic_record_url, fee_statement_url, status, submitted_at,
-                    student:students (
-                        id, first_name, last_name, university_id, student_number, course, year_of_study, verification_status,
-                        university:universities (name)
-                    )
-                `)
+id, student_id, document_type, document_url, id_url, enrollment_url, academic_record_url, fee_statement_url, status, submitted_at,
+    student: students(
+        id, first_name, last_name, university_id, student_number, course, year_of_study, verification_status,
+        university: universities(name)
+    )
+        `)
                 .eq('status', 'pending');
 
             if (verifError) throw verifError;
 
-            // Fetch Pending Milestones
-            const { data: milestoneData } = await supabase
-                .from('campaign_milestones')
-                .select(`
-                    *,
-                    campaign:campaigns (
-                        title,
-                        student:students (
-                            first_name, last_name, email
-                        )
-                    )
-                `)
-                .eq('status', 'pending_review')
-                .order('created_at', { ascending: true });
 
-            setPendingMilestones(milestoneData || []);
 
             // Map to ExtendedVerification
             const mappedVerifications: ExtendedVerification[] = (verifData || []).map((v: any) => ({
@@ -256,12 +242,12 @@ const AdminDashboard: React.FC = () => {
             const { data: pendingData } = await supabase
                 .from('campaigns')
                 .select(`
-                    *,
-                    student:students (
-                        first_name, last_name, course, student_number,
-                        university:universities (name)
-                    )
-                `)
+        *,
+        student: students(
+            first_name, last_name, course, student_number,
+            university: universities(name)
+        )
+            `)
                 .eq('status', 'pending')
                 .order('created_at', { ascending: true });
 
@@ -269,11 +255,11 @@ const AdminDashboard: React.FC = () => {
             const { data: recentData } = await supabase
                 .from('campaigns')
                 .select(`
-                    *,
-                    student:students (
-                        first_name, last_name, course, student_number,
-                        university:universities (name)
-                    )
+            *,
+            student: students(
+                first_name, last_name, course, student_number,
+                university: universities(name)
+            )
                 `)
                 .neq('status', 'pending')
                 .order('created_at', { ascending: false })
@@ -424,7 +410,7 @@ const AdminDashboard: React.FC = () => {
             // 7. Calculate Stats
             const { data: campaignStats } = await supabase
                 .from('campaigns')
-                .select('raised_amount, status');
+                .select('raised_amount, status, goal_amount');
 
             const activeCampaignsData = campaignStats?.filter(c => c.status === 'active') || [];
             const pendingCampaignsData = campaignStats?.filter(c => c.status === 'pending') || [];
@@ -436,9 +422,27 @@ const AdminDashboard: React.FC = () => {
                 totalFunded = totalRaisedData;
             } else {
                 // Fallback
-                const { data: donations } = await supabase.from('donations').select('amount');
+                const { data: donations } = await supabase.from('donations').select('amount').eq('payment_status', 'completed');
                 totalFunded = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
             }
+
+            // Total Donors
+            const { data: donorCountData } = await supabase.rpc('get_total_unique_donors');
+            const totalDonors = donorCountData || 0;
+
+            // Funded Students (Approximation: Number of active campaigns that have raised at least some money)
+            // Since we can't use the RPC, use local filter on fetched campaigns if possible, or just active count.
+            // We only fetched 'campaignStats' which has raised_amount.
+            const fundedStudentsCount = activeCampaignsData.filter(c => (c.raised_amount || 0) > 0).length;
+
+            // Success Rate / Funding Percentage
+            let fundingPercentage = 0;
+            const activeGoals = activeCampaignsData.reduce((acc, c) => acc + (c.goal_amount || 0), 0);
+            const activeRaised = activeCampaignsData.reduce((acc, c) => acc + (c.raised_amount || 0), 0);
+            if (activeGoals > 0) {
+                fundingPercentage = (activeRaised / activeGoals) * 100;
+            }
+
 
             // 8. Fetch All Transactions for History Tab
             const { data: allTrans } = await supabase
@@ -460,12 +464,15 @@ const AdminDashboard: React.FC = () => {
 
             setStats({
                 // Stats
-                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0) + (milestoneData?.length || 0),
+                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0),
                 pendingCampaignsCount: pendingCampaignsData.length,
                 activeCampaigns: activeCampaignsData.length,
                 totalFunded: totalFunded,
                 totalUniversities: uniData?.length || 0,
-                disabledCount: disabledData?.length || 0
+                disabledCount: disabledData?.length || 0,
+                totalDonors,
+                fundedStudentsCount,
+                fundingPercentage
             });
 
         } catch (error) {
@@ -629,36 +636,19 @@ const AdminDashboard: React.FC = () => {
         if (!confirm(`Confirm receipt of R${donation.amount}?`)) return;
 
         try {
-            // 1. Update Donation Status
-            const { error: donationError } = await supabase
-                .from('donations')
-                .update({ status: 'received' }) // 'received' implies approved/completed
-                .eq('id', donation.id);
+            // Use RPC function for safe donation approval
+            // This handles notification creation safely and updates campaign stats
+            const { error: rpcError } = await supabase.rpc('admin_approve_donation', {
+                p_donation_id: donation.id
+            });
 
-            if (donationError) throw donationError;
-
-            // 2. Update Campaign Raised Amount (if applicable)
-            if (donation.campaign_id) {
-                const { data: campaignData, error: fetchError } = await supabase
-                    .from('campaigns')
-                    .select('raised_amount')
-                    .eq('id', donation.campaign_id)
-                    .single();
-
-                if (!fetchError && campaignData) {
-                    const newAmount = (campaignData.raised_amount || 0) + donation.amount;
-                    await supabase
-                        .from('campaigns')
-                        .update({ raised_amount: newAmount })
-                        .eq('id', donation.campaign_id);
-                }
-            }
+            if (rpcError) throw rpcError;
 
             toast.success("Donation approved successfully.");
             fetchDashboardData();
         } catch (error: any) {
             console.error("Error approving donation:", error);
-            toast.error("Failed to approve donation.");
+            toast.error("Failed to approve donation: " + (error.message || "Unknown error"));
         }
     };
 
@@ -667,7 +657,7 @@ const AdminDashboard: React.FC = () => {
         try {
             const { error } = await supabase
                 .from('donations')
-                .update({ status: 'rejected' })
+                .update({ payment_status: 'failed' })
                 .eq('id', id);
 
             if (error) throw error;
@@ -825,97 +815,7 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const handleApproveMilestone = async (milestone: any) => {
-        try {
-            // 1. Update Milestone Status
-            const { error: msError } = await supabase
-                .from('campaign_milestones')
-                .update({ status: 'approved' })
-                .eq('id', milestone.id);
 
-            if (msError) throw msError;
-
-            // 2. Unpause Campaign and Update Last Cleared
-            const { error: campError } = await supabase
-                .from('campaigns')
-                .update({
-                    is_paused: false,
-                    last_milestone_cleared: milestone.milestone_percentage
-                })
-                .eq('id', milestone.campaign_id);
-
-            if (campError) throw campError;
-
-            // 3. Notify Student
-            // Assume we need student ID from campaign relationship (not in milestone object directly, found via loop or query)
-            // But we fetched it in 'milestoneData' nested
-            // The milestone object here comes from 'pendingMilestones' state which has the nested structure.
-
-            /* 
-               Logic note: The 'milestone' argument passed here is from the map() in render.
-               It should have the structure from fetch.
-            */
-            // const studentName = milestone.campaign?.student?.first_name || 'Student';
-
-            // We need student_id. It's not in the join I selected? 
-            // Wait, I selected 'campaign:campaigns(...)'. campaigns table has student_id.
-            // I should select student_id in the fetch query to be safe, or fetch it now.
-
-            // Re-fetch to notify logic or just allow database trigger to handle?
-            // Let's do a direct notification query.
-            const { data: cData } = await supabase.from('campaigns').select('student_id').eq('id', milestone.campaign_id).single();
-            if (cData) {
-                await supabase.from('notifications').insert({
-                    user_id: cData.student_id,
-                    title: 'Fee Statement Approved!',
-                    message: `Your uploaded fee statement for the ${milestone.milestone_percentage}% milestone has been approved. Your campaign is active again.`,
-                    type: 'success'
-                });
-            }
-
-            toast.success("Milestone approved and campaign unpaused.");
-            fetchDashboardData();
-
-        } catch (err: any) {
-            console.error("Error approving milestone:", err);
-            toast.error("Failed to approve milestone.");
-        }
-    };
-
-    const handleRejectMilestone = async (milestone: any) => {
-        const reason = prompt("Enter rejection reason:");
-        if (!reason) return;
-
-        try {
-            // 1. Update Milestone Status (Rejected)
-            const { error: msError } = await supabase
-                .from('campaign_milestones')
-                .update({
-                    status: 'rejected',
-                    rejection_reason: reason
-                })
-                .eq('id', milestone.id);
-
-            if (msError) throw msError;
-
-            // 2. Notify Student
-            const { data: cData } = await supabase.from('campaigns').select('student_id').eq('id', milestone.campaign_id).single();
-            if (cData) {
-                await supabase.from('notifications').insert({
-                    user_id: cData.student_id,
-                    title: 'Fee Statement Rejected',
-                    message: `Your fee statement for ${milestone.milestone_percentage}% milestone was rejected. Reason: ${reason}. Please upload a valid statement.`,
-                    type: 'error'
-                });
-            }
-
-            toast.success("Milestone rejected.");
-            fetchDashboardData();
-        } catch (err: any) {
-            console.error("Error rejecting milestone:", err);
-            toast.error("Failed to reject milestone.");
-        }
-    };
 
 
 
@@ -1271,13 +1171,43 @@ const AdminDashboard: React.FC = () => {
                                     <span className="admin-stat-tag">Verify Payment</span>
                                 </div>
 
+                                <div className="admin-stat-card info">
+                                    <div className="admin-stat-icon">
+                                        <Users size={24} />
+                                    </div>
+                                    <div className="admin-stat-info">
+                                        <span className="admin-stat-value">{stats.totalDonors}</span>
+                                        <span className="admin-stat-label">Total Donors</span>
+                                    </div>
+                                </div>
+
+                                <div className="admin-stat-card success">
+                                    <div className="admin-stat-icon bg-green-100 text-green-600">
+                                        <GraduationCap size={24} />
+                                    </div>
+                                    <div className="admin-stat-info">
+                                        <span className="admin-stat-value">{stats.fundedStudentsCount}</span>
+                                        <span className="admin-stat-label">Funded Students</span>
+                                    </div>
+                                </div>
+
+                                <div className="admin-stat-card info">
+                                    <div className="admin-stat-icon">
+                                        <BarChart3 size={24} />
+                                    </div>
+                                    <div className="admin-stat-info">
+                                        <span className="admin-stat-value">{stats.fundingPercentage.toFixed(1)}%</span>
+                                        <span className="admin-stat-label">Goal Success</span>
+                                    </div>
+                                </div>
+
                                 <div
                                     className="admin-stat-card info clickable"
                                     onClick={() => setActiveTab('transactions')}
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <div className="admin-stat-icon">
-                                        <BarChart3 size={24} />
+                                        <DollarSign size={24} />
                                     </div>
                                     <div className="admin-stat-info">
                                         <span className="admin-stat-value">
@@ -1369,70 +1299,7 @@ const AdminDashboard: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* Pending Milestones */}
-                            <div className="admin-section">
-                                <h2 className="admin-section-title">Pending Milestone Reviews</h2>
-                                {pendingMilestones.length > 0 ? (
-                                    <div className="admin-table-wrapper">
-                                        <table className="admin-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Campaign</th>
-                                                    <th>Milestone</th>
-                                                    <th>Student</th>
-                                                    <th>Statement</th>
-                                                    <th>Date</th>
-                                                    <th>Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pendingMilestones.map((ms) => (
-                                                    <tr key={ms.id}>
-                                                        <td>{ms.campaign?.title || 'Unknown'}</td>
-                                                        <td>
-                                                            <span className="badge badge-blue">{ms.milestone_percentage}% Funded</span>
-                                                        </td>
-                                                        <td>{ms.campaign?.student?.first_name} {ms.campaign?.student?.last_name}</td>
-                                                        <td>
-                                                            <button
-                                                                className="document-link-pill"
-                                                                onClick={() => handleViewDocument(ms.proof_url, "Fee Statement")}
-                                                            >
-                                                                <FileText size={14} /> View PDF
-                                                            </button>
-                                                        </td>
-                                                        <td>{new Date(ms.created_at).toLocaleDateString()}</td>
-                                                        <td>
-                                                            <div className="action-buttons">
-                                                                <button
-                                                                    className="action-btn approve"
-                                                                    onClick={() => handleApproveMilestone(ms)}
-                                                                    title="Approve & Unpause"
-                                                                >
-                                                                    <CheckCircle size={16} />
-                                                                </button>
-                                                                <button
-                                                                    className="action-btn reject"
-                                                                    onClick={() => handleRejectMilestone(ms)}
-                                                                    title="Reject"
-                                                                >
-                                                                    <XCircle size={16} />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="empty-state">
-                                        <CheckCircle size={48} className="empty-icon" />
-                                        <h3>No pending milestones</h3>
-                                        <p>All active campaigns are verified.</p>
-                                    </div>
-                                )}
-                            </div>
+
 
                             {/* Pending Donations */}
                             <div className="admin-section">

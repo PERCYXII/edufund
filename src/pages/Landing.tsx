@@ -182,17 +182,23 @@ const Landing: React.FC = () => {
                     setFeaturedCampaigns(withDays);
                 }
 
-                // 2. Fetch Stats (Approximations)
+                // 2. Fetch Stats (Approximations & RPCs)
                 // Universities count
                 const { count: uniCount } = await supabase.from('universities').select('*', { count: 'exact', head: true });
-                // Donors count - using RPC for accuracy (unique emails)
+
+                // Donors count - using RPC (existing)
                 const { data: donorCountData, error: donorRpcError } = await supabase.rpc('get_total_unique_donors');
                 const realDonorCount = (!donorRpcError && donorCountData !== null) ? donorCountData : 0;
 
-                // Students count (active campaigns)
-                const { count: studentCount } = await supabase.from('campaigns').select('*', { count: 'exact', head: true });
+                // Funded Students - Fallback to active campaigns count (since RPC failed)
+                const { count: activeCampaignsCount } = await supabase
+                    .from('campaigns')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'active');
 
-                // Total funded - using RPC for accuracy
+                const studentsHelpedCount = activeCampaignsCount || 850;
+
+                // Total funded - using RPC
                 const { data: totalRaisedData, error: rpcError } = await supabase.rpc('get_total_donations');
 
                 let totalRaised = 0;
@@ -200,13 +206,13 @@ const Landing: React.FC = () => {
                     totalRaised = totalRaisedData;
                 } else {
                     // Fallback to manual sum if RPC fails
-                    const { data: donations } = await supabase.from('donations').select('amount').limit(100);
+                    const { data: donations } = await supabase.from('donations').select('amount').eq('payment_status', 'completed');
                     totalRaised = donations ? donations.reduce((acc, curr) => acc + curr.amount, 0) : 0;
                 }
 
                 setStats({
                     totalFunded: totalRaised,
-                    studentsHelped: studentCount || 850,
+                    studentsHelped: studentsHelpedCount,
                     totalDonors: realDonorCount,
                     partnerUniversities: uniCount || 26
                 });

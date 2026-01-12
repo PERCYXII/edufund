@@ -29,6 +29,23 @@ export const CAMPAIGN_CATEGORIES = [
     { label: 'Other', value: 'other' },
 ];
 
+export const CAMPAIGN_TYPES = [
+    { label: 'Standard Campaign', value: 'standard', description: 'Large fees like Tuition and Accommodation' },
+    { label: 'Quick Support', value: 'quick', description: 'Small fees like Application, Registration, Meal and Stationary assistance' },
+];
+
+export const CATEGORY_TO_TYPE: Record<string, 'standard' | 'quick'> = {
+    'tuition': 'standard',
+    'accommodation': 'standard',
+    'food': 'quick',
+    'textbooks': 'quick',
+    'transport': 'quick',
+    'application_fee': 'quick',
+    'registration_fee': 'quick',
+    'stationary': 'quick',
+    'other': 'quick',
+};
+
 // ============================================
 // Year of Study Options
 // ============================================

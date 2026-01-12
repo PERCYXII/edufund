@@ -62,7 +62,7 @@ export interface Campaign {
   status: 'draft' | 'pending' | 'active' | 'completed' | 'expired' | 'rejected';
   isPaused?: boolean;
   lastMilestoneCleared?: number;
-  type: 'standard' | 'quick_assist';
+  type: 'standard' | 'quick';
   category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
   isUrgent: boolean;
   fundingBreakdown: FundingItem[];
@@ -79,16 +79,6 @@ export interface Campaign {
 export interface CampaignWithStudent extends Campaign {
   student: Student;
   university: University;
-}
-
-export interface CampaignMilestone {
-  id: string;
-  campaignId: string;
-  milestonePercentage: number;
-  status: 'pending_upload' | 'pending_review' | 'approved' | 'rejected';
-  proofUrl?: string;
-  rejectionReason?: string;
-  createdAt: string;
 }
 
 export interface FundingItem {
@@ -212,7 +202,7 @@ export interface DonorRegistrationData {
 export interface CampaignFormData {
   title: string;
   story: string;
-  type: 'standard' | 'quick_assist';
+  type: 'standard' | 'quick';
   category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
   goal: number;
   endDate: string;

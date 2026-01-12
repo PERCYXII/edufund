@@ -37,22 +37,40 @@ import { useAuth } from '../context/AuthContext';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
-import type { Campaign, University, CampaignMilestone } from '../types';
+import type { CampaignWithStudent, University, Campaign } from '../types';
 import { CAMPAIGN_CATEGORIES } from '../data/constants';
 import './Dashboard.css';
 import './Modal.css';
+import StudentVerificationForm from '../components/StudentVerificationForm';
+import MilestoneUpload from '../components/MilestoneUpload';
+
+// Local interface for dashboard display
+interface DashboardDonation {
+    id: string;
+    name: string;
+    amount: number;
+    date: string;
+    isAnonymous: boolean;
+}
 
 const StudentDashboard: React.FC = () => {
-    const { user, isLoading: authLoading, logout, notifications } = useAuth();
+    const { user, isLoading: authLoading, logout, notifications, refreshUser } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<string>('overview');
     const [showNotifications, setShowNotifications] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
+    // Redirect to registration if profile is missing
+    useEffect(() => {
+        if (!authLoading && user && !user.student && user.role === 'student') {
+            navigate('/register');
+        }
+    }, [user, authLoading, navigate]);
+
     // Data state
-    const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [campaign, setCampaign] = useState<CampaignWithStudent | null>(null);
     const [university, setUniversity] = useState<University | null>(null);
-    const [recentDonations, setRecentDonations] = useState<any[]>([]);
+    const [recentDonations, setRecentDonations] = useState<DashboardDonation[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsPhone, setSettingsPhone] = useState('');
@@ -64,21 +82,13 @@ const StudentDashboard: React.FC = () => {
     const [isExtending, setIsExtending] = useState(false);
     // State for donors modal
     const [showDonorsModal, setShowDonorsModal] = useState(false);
-    const [allDonations, setAllDonations] = useState<any[]>([]);
+    const [allDonations, setAllDonations] = useState<DashboardDonation[]>([]);
     const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
-    const [pendingMilestone, setPendingMilestone] = useState<CampaignMilestone | null>(null);
-    const [showMilestoneModal, setShowMilestoneModal] = useState(false);
-    const [milestoneFile, setMilestoneFile] = useState<File | null>(null);
-    const [uploadingMilestone, setUploadingMilestone] = useState(false);
+    const [pendingMilestone, setPendingMilestone] = useState<any>(null);
 
     // Verification state
-    const [verificationSubmitting, setVerificationSubmitting] = useState(false);
-    const [verificationFormData, setVerificationFormData] = useState({
-        idDocument: null as File | null,
-        enrollmentDocument: null as File | null,
-        feeStatement: null as File | null
-    });
+    // Verification state - Refactored to component
 
     const percentFunded = campaign && campaign.goal > 0 ? Math.min(100, Math.round(((campaign.raised || 0) / campaign.goal) * 100)) : 0;
 
@@ -133,18 +143,23 @@ const StudentDashboard: React.FC = () => {
 
     const handleDeleteCampaign = async () => {
         if (!campaign) return;
-        if (window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) {
+        if (window.confirm("Are you sure you want to delete this campaign? This action cannot be undone. Your student profile will remain verified.")) {
             try {
-                const { error } = await supabase
+                // 1. Delete Campaign
+                const { error: deletionError } = await supabase
                     .from('campaigns')
                     .delete()
                     .eq('id', campaign.id);
 
-                if (error) throw error;
+                if (deletionError) throw deletionError;
 
+                // 2. Clear local state and refresh user
                 setCampaign(null);
-                alert("Campaign deleted successfully");
-                window.location.reload();
+                await refreshUser();
+
+                alert("Campaign deleted successfully.");
+                setActiveTab('overview');
+
             } catch (error: any) {
                 console.error("Error deleting campaign:", error);
                 alert("Failed to delete campaign: " + error.message);
@@ -178,50 +193,6 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
-    const handleMilestoneUpload = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!milestoneFile || !pendingMilestone) return;
-        setUploadingMilestone(true);
-
-        try {
-            const fileExt = milestoneFile.name.split('.').pop();
-            const fileName = `${campaign?.id}/milestones/${pendingMilestone.milestonePercentage}_${Date.now()}.${fileExt}`;
-
-            // Upload to documents bucket
-            const { error: uploadError, data: uploadData } = await supabase.storage
-                .from('documents')
-                .upload(fileName, milestoneFile);
-
-            if (uploadError) throw uploadError;
-
-            // Update milestone record
-            const { error: updateError } = await supabase
-                .from('campaign_milestones')
-                .update({
-                    status: 'pending_review',
-                    proof_url: uploadData.path,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', pendingMilestone.id);
-
-            if (updateError) throw updateError;
-
-
-
-            alert("Fee statement uploaded successfully! It is now pending review.");
-            setShowMilestoneModal(false);
-            setMilestoneFile(null);
-            // Refresh to update status
-            window.location.reload();
-
-        } catch (err: any) {
-            console.error("Error uploading milestone proof:", err);
-            alert("Failed to upload: " + err.message);
-        } finally {
-            setUploadingMilestone(false);
-        }
-    };
-
 
     const handleShowDonors = async () => {
         if (!campaign) return;
@@ -243,12 +214,12 @@ const StudentDashboard: React.FC = () => {
             if (error) throw error;
 
             if (donations) {
-                setAllDonations(donations.map(d => ({
+                setAllDonations(donations.map((d: any) => ({
                     id: d.id,
                     name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
                     amount: d.amount,
                     date: new Date(d.created_at).toLocaleDateString(),
-                    anonymous: d.is_anonymous
+                    isAnonymous: d.is_anonymous
                 })));
             }
         } catch (err) {
@@ -299,31 +270,6 @@ const StudentDashboard: React.FC = () => {
                 if (campaigns && campaigns.length > 0) {
                     const rawCampaign = campaigns[0];
 
-                    // Fetch all donations with details
-                    const { data: campaignDonations } = await supabase
-                        .from('donations')
-                        .select('amount, donor_id, is_anonymous, payment_status')
-                        .eq('campaign_id', rawCampaign.id)
-                        .eq('payment_status', 'completed');
-
-                    const actualRaised = campaignDonations?.reduce((sum, d) => sum + d.amount, 0) || 0;
-
-                    // Calculate unique donors
-                    // If donor_id is present, count unique IDs.
-                    // If donor_id is null (e.g. guest), count each transaction as a unique donor for now (unless we have guest_email).
-                    const uniqueDonors = new Set();
-                    let guestDonorCount = 0;
-
-                    campaignDonations?.forEach(d => {
-                        if (d.donor_id) {
-                            uniqueDonors.add(d.donor_id);
-                        } else {
-                            guestDonorCount++;
-                        }
-                    });
-
-                    const totalDonors = uniqueDonors.size + guestDonorCount;
-
                     // Fetch funding items
                     const { data: fundingItems } = await supabase
                         .from('funding_items')
@@ -342,8 +288,8 @@ const StudentDashboard: React.FC = () => {
                         title: rawCampaign.title,
                         story: rawCampaign.story,
                         goal: Number(rawCampaign.goal_amount),
-                        raised: actualRaised,
-                        donors: totalDonors,
+                        raised: Number(rawCampaign.raised_amount || 0),
+                        donors: Number(rawCampaign.donors || 0),
                         daysLeft: daysLeft > 0 ? daysLeft : 0,
                         startDate: rawCampaign.start_date,
                         endDate: rawCampaign.end_date,
@@ -369,7 +315,22 @@ const StudentDashboard: React.FC = () => {
                         updatedAt: rawCampaign.updated_at
                     };
 
-                    setCampaign(mappedCampaign);
+                    setCampaign(mappedCampaign as unknown as CampaignWithStudent);
+
+                    // Fetch Pending Milestone if paused
+                    if (rawCampaign.is_paused) {
+                        const { data: milestones } = await supabase
+                            .from('campaign_milestones')
+                            .select('*')
+                            .eq('campaign_id', rawCampaign.id)
+                            .order('milestone_percentage', { ascending: true }); // Get lowest uncleared?
+
+                        // Pick the first one that is pending upload or rejected (needs retry)
+                        const pending = milestones?.find(m => m.status === 'pending_upload' || m.status === 'rejected');
+                        if (pending) {
+                            setPendingMilestone(pending);
+                        }
+                    }
 
                     // Fetch Recent Donations
                     const { data: donations, error: donationError } = await supabase
@@ -387,34 +348,12 @@ const StudentDashboard: React.FC = () => {
                             name: d.is_anonymous ? 'Anonymous' : `${d.donors?.first_name || 'Unknown'} ${d.donors?.last_name || ''}`.trim(),
                             date: new Date(d.created_at).toLocaleDateString(),
                             amount: d.amount,
-                            anonymous: d.is_anonymous
+                            isAnonymous: d.is_anonymous
                         })));
                     }
                 }
 
-                // Fetch Pending Milestone
-                if (campaigns && campaigns.length > 0) {
-                    const { data: milestoneData } = await supabase
-                        .from('campaign_milestones')
-                        .select('*')
-                        .eq('campaign_id', campaigns[0].id)
-                        .in('status', ['pending_upload', 'rejected', 'pending_review'])
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
 
-                    if (milestoneData) {
-                        setPendingMilestone({
-                            id: milestoneData.id,
-                            campaignId: milestoneData.campaign_id,
-                            milestonePercentage: milestoneData.milestone_percentage,
-                            status: milestoneData.status,
-                            proofUrl: milestoneData.proof_url,
-                            rejectionReason: milestoneData.rejection_reason,
-                            createdAt: milestoneData.created_at
-                        });
-                    }
-                }
 
                 // Fetch University
                 if (user.student?.universityId) {
@@ -460,71 +399,6 @@ const StudentDashboard: React.FC = () => {
     if (authLoading || (loading && !campaign && !user?.student?.universityId)) {
         return <LoadingScreen />;
     }
-
-    const handleVerificationSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setVerificationSubmitting(true);
-        try {
-            const files = {
-                id: verificationFormData.idDocument,
-                enrollment: verificationFormData.enrollmentDocument,
-                feeStatement: verificationFormData.feeStatement
-            };
-
-            for (const [type, file] of Object.entries(files)) {
-                if (file) {
-                    const fileExt = file.name.split('.').pop();
-                    const fileName = `verification/${user?.id}/${type}_${Date.now()}.${fileExt}`;
-
-                    const { error: uploadError, data } = await supabase.storage
-                        .from('documents')
-                        .upload(fileName, file);
-
-                    if (uploadError) throw uploadError;
-
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('documents')
-                        .getPublicUrl(data.path);
-
-                    await supabase.from('verification_requests').insert({
-                        student_id: user?.id,
-                        document_type: type,
-                        document_url: publicUrl,
-                        status: 'pending'
-                    });
-                }
-            }
-
-            await supabase
-                .from('students')
-                .update({ verification_status: 'pending' })
-                .eq('id', user?.id);
-
-            // Notify Admins
-            const { data: admins } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('role', 'admin');
-
-            if (admins && admins.length > 0) {
-                const notifs = admins.map(admin => ({
-                    user_id: admin.id,
-                    title: 'New Verification Request 🛡️',
-                    message: `${user?.student?.firstName || 'Student'} has submitted profile verification documents.`,
-                    type: 'info'
-                }));
-                await supabase.from('notifications').insert(notifs);
-            }
-
-            alert("Verification documents submitted successfully!");
-            window.location.reload();
-        } catch (error: any) {
-            console.error("Verification submit error:", error);
-            alert("Failed to submit verification: " + error.message);
-        } finally {
-            setVerificationSubmitting(false);
-        }
-    };
 
     return (
         <div className="dashboard-page">
@@ -707,420 +581,308 @@ const StudentDashboard: React.FC = () => {
                                         </p>
                                     </div>
                                 ) : (
-                                    <form onSubmit={handleVerificationSubmit} className="space-y-8">
-                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-                                            <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-lg">
-                                                <AlertCircle size={20} />
-                                                Verified Student Advantage
-                                            </h4>
-                                            <p className="text-blue-800">
-                                                Donors are most likely to fund students who have verified their enrollment status.
-                                                By uploading your documents, you unlock the full potential of EduFund.
-                                            </p>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="form-group space-y-2">
-                                                <label className="form-label font-medium text-gray-700">ID Document / Passport *</label>
-                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
-                                                    <input
-                                                        type="file"
-                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                        accept=".pdf,.png,.jpg,.jpeg"
-                                                        required
-                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, idDocument: e.target.files?.[0] || null }))}
-                                                    />
-                                                    <div className="flex flex-col items-center">
-                                                        <FileText size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
-                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
-                                                            {verificationFormData.idDocument ? verificationFormData.idDocument.name : 'Click to Upload ID'}
-                                                        </span>
-                                                        <span className="text-xs text-gray-500 mt-1">PDF, JPG or PNG</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="form-group space-y-2">
-                                                <label className="form-label font-medium text-gray-700">Proof of Enrollment *</label>
-                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
-                                                    <input
-                                                        type="file"
-                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                        accept=".pdf,.png,.jpg,.jpeg"
-                                                        required
-                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, enrollmentDocument: e.target.files?.[0] || null }))}
-                                                    />
-                                                    <div className="flex flex-col items-center">
-                                                        <GraduationCap size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
-                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
-                                                            {verificationFormData.enrollmentDocument ? verificationFormData.enrollmentDocument.name : 'Click to Upload Proof'}
-                                                        </span>
-                                                        <span className="text-xs text-gray-500 mt-1">Official University Letterhead</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="form-group space-y-2 md:col-span-2">
-                                                <label className="form-label font-medium text-gray-700">Fee Statement (Optional)</label>
-                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition-colors text-center cursor-pointer relative bg-gray-50 hover:bg-white group">
-                                                    <input
-                                                        type="file"
-                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                        accept=".pdf,.png,.jpg,.jpeg"
-                                                        onChange={e => setVerificationFormData(prev => ({ ...prev, feeStatement: e.target.files?.[0] || null }))}
-                                                    />
-                                                    <div className="flex flex-col items-center">
-                                                        <DollarSign size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
-                                                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
-                                                            {verificationFormData.feeStatement ? verificationFormData.feeStatement.name : 'Click to Upload Fee Statement'}
-                                                        </span>
-                                                        <span className="text-xs text-gray-500 mt-1">Latest Financial Statement</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="pt-4 border-t border-gray-100 flex justify-end">
-                                            <button
-                                                type="submit"
-                                                className="btn btn-primary px-8 py-3 rounded-lg font-semibold shadow-lg shadow-primary-200 hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                                                disabled={verificationSubmitting}
-                                            >
-                                                {verificationSubmitting ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                        Uploading...
-                                                    </div>
-                                                ) : (
-                                                    'Submit Verification Documents'
-                                                )}
-                                            </button>
-                                        </div>
-                                    </form>
+                                    <StudentVerificationForm user={user} onSuccess={() => window.location.reload()} />
                                 )}
                             </div>
                         </div>
                     )}
 
                     {/* Overview Tab */}
-                    {
-                        activeTab === 'overview' && (
-                            <>
-                                {/* Verification Status rendering... */}
-                                {user?.student?.verificationStatus === 'pending' && (
-                                    <div className="alert alert-info">
-                                        <Clock size={24} />
+                    {activeTab === 'overview' && (
+                        <>
+                            {/* Verification Status rendering... */}
+                            {user?.student?.verificationStatus === 'pending' && (
+                                <div className="alert alert-info">
+                                    <Clock size={24} />
+                                    <div>
+                                        <h4>Verification Pending</h4>
+                                        <p>Your documents are being reviewed. You'll be able to create a campaign once verified.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {user?.student?.verificationStatus === 'approved' && verificationCount === 0 && (
+                                <div className="alert alert-warning mb-6 border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r shadow-sm">
+                                    <div className="flex items-start gap-4">
+                                        <AlertCircle className="text-yellow-600 shrink-0" size={24} />
                                         <div>
-                                            <h4>Verification Pending</h4>
-                                            <p>Your documents are being reviewed. You'll be able to create a campaign once verified.</p>
+                                            <h4 className="font-bold text-yellow-800 text-lg mb-1">Action Required: Re-submit Documents</h4>
+                                            <p className="text-yellow-700">
+                                                It looks like your account was restored but your documents are missing.
+                                                Please <strong>Create a Campaign</strong> to upload your verification documents (ID, Fee Statement, Enrollment) and restore your full account status.
+                                            </p>
                                         </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {user?.student?.verificationStatus === 'approved' && verificationCount === 0 && (
-                                    <div className="alert alert-warning mb-6 border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r shadow-sm">
-                                        <div className="flex items-start gap-4">
-                                            <AlertCircle className="text-yellow-600 shrink-0" size={24} />
-                                            <div>
-                                                <h4 className="font-bold text-yellow-800 text-lg mb-1">Action Required: Re-submit Documents</h4>
-                                                <p className="text-yellow-700">
-                                                    It looks like your account was restored but your documents are missing.
-                                                    Please <strong>Create a Campaign</strong> to upload your verification documents (ID, Fee Statement, Enrollment) and restore your full account status.
-                                                </p>
-                                            </div>
-                                        </div>
+                            {user?.student?.verificationStatus === 'approved' && (verificationCount !== 0) && (
+                                <div className="alert alert-success">
+                                    <CheckCircle size={24} />
+                                    <div>
+                                        <h4>Account Verified</h4>
+                                        <p>Your student status has been verified. You can now create and manage your campaign.</p>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {user?.student?.verificationStatus === 'approved' && (verificationCount !== 0) && (
-                                    <div className="alert alert-success">
-                                        <CheckCircle size={24} />
-                                        <div>
-                                            <h4>Account Verified</h4>
-                                            <p>Your student status has been verified. You can now create and manage your campaign.</p>
+
+
+                            {!campaign ? (
+                                <div className="card empty-campaign-card">
+                                    {/* Empty state... */}
+                                    <div className="empty-campaign-content">
+                                        <div className="empty-campaign-icon">
+                                            <FileText size={48} strokeWidth={1.5} />
                                         </div>
+                                        <h3 className="empty-campaign-title">No Active Campaign</h3>
+                                        <p className="empty-campaign-description">
+                                            Create a fundraising campaign to start receiving support for your education.
+                                            Your campaign will be reviewed by our team before going live.
+                                        </p>
+                                        <button
+                                            className="btn btn-primary btn-lg"
+                                            onClick={() => setActiveTab('create')}
+                                        >
+                                            <PlusCircle size={20} />
+                                            Create New Campaign
+                                        </button>
+                                        <p className="empty-campaign-note">
+                                            <Clock size={14} />
+                                            Campaign approval typically takes 24-48 hours
+                                        </p>
                                     </div>
-                                )}
-
-                                {campaign?.isPaused && (
-                                    <div className="alert alert-warning mb-6 border-l-4 border-orange-500 bg-orange-50 p-4 rounded-r shadow-sm">
-                                        <div className="flex items-start gap-4">
-                                            <AlertCircle className="text-orange-600 shrink-0" size={24} />
+                                </div>
+                            ) : (
+                                <>
+                                    {campaign.isPaused && (
+                                        <div className="alert alert-warning mb-6 border-2 border-amber-300 bg-amber-50">
+                                            <AlertCircle size={24} className="text-amber-600" />
                                             <div className="flex-1">
-                                                <h4 className="font-bold text-orange-800 text-lg mb-1">Campaign Temporarily Paused</h4>
-                                                <p className="text-orange-700 mb-3">
-                                                    Your campaign has reached a funding milestone and is paused.
-                                                    Please upload your updated fee statement to resume fundraising.
+                                                <h4 className="font-bold text-amber-800">Campaign Paused</h4>
+                                                <p className="text-amber-700">
+                                                    Your campaign is paused at the <strong>{pendingMilestone?.milestone_percentage || campaign.lastMilestoneCleared || 15}%</strong> milestone.
+                                                    To continue receiving donations, please upload an updated fee statement or proof of university payment.
                                                 </p>
                                                 <button
-                                                    onClick={() => setShowMilestoneModal(true)}
-                                                    className="btn btn-sm btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg"
+                                                    className="btn btn-warning btn-sm mt-3"
+                                                    onClick={() => setActiveTab('campaign')}
                                                 >
-                                                    <Upload size={16} className="mr-2" />
-                                                    Upload Fee Statement
+                                                    Take Action
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {!campaign ? (
-                                    <div className="card empty-campaign-card">
-                                        {/* Empty state... */}
-                                        <div className="empty-campaign-content">
-                                            <div className="empty-campaign-icon">
-                                                <FileText size={48} strokeWidth={1.5} />
+                                    {/* Status alerts... */}
+                                    {campaign.status === 'pending' && (
+                                        <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
+                                            <Clock size={24} />
+                                            <div>
+                                                <h4>Campaign Pending Approval</h4>
+                                                <p>Your campaign is being reviewed by our team. It will go live once approved. This typically takes 24-48 hours.</p>
                                             </div>
-                                            <h3 className="empty-campaign-title">No Active Campaign</h3>
-                                            <p className="empty-campaign-description">
-                                                Create a fundraising campaign to start receiving support for your education.
-                                                Your campaign will be reviewed by our team before going live.
-                                            </p>
-                                            <button
-                                                className="btn btn-primary btn-lg"
-                                                onClick={() => setActiveTab('create')}
-                                            >
-                                                <PlusCircle size={20} />
-                                                Create New Campaign
-                                            </button>
-                                            <p className="empty-campaign-note">
-                                                <Clock size={14} />
-                                                Campaign approval typically takes 24-48 hours
-                                            </p>
                                         </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* Paused Alert */}
-                                        {campaign.isPaused && (
-                                            <div className="alert alert-warning border-l-4 border-yellow-500 bg-yellow-50 mb-6">
-                                                <AlertCircle size={28} className="text-yellow-600" />
-                                                <div className="flex-1">
-                                                    <h4 className="text-yellow-800 font-bold text-lg">Campaign Paused: Funding Milestone Reached</h4>
-                                                    <p className="text-yellow-700 mb-3">
-                                                        Congratulations! You've reached {pendingMilestone?.milestonePercentage || 'a funding'}% of your goal.
-                                                        To ensure transparency, please upload your latest fee statement to verify your continued need.
-                                                        Your campaign is paused until this is approved.
-                                                    </p>
-                                                    <button
-                                                        className="btn btn-sm btn-primary"
-                                                        onClick={() => setShowMilestoneModal(true)}
-                                                    >
-                                                        <Upload size={16} />
-                                                        Upload Fee Statement
-                                                    </button>
-                                                </div>
+                                    )}
+
+                                    {campaign.status === 'rejected' && (
+                                        <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-6)' }}>
+                                            <XCircle size={24} />
+                                            <div>
+                                                <h4>Campaign Not Approved</h4>
+                                                <p>Unfortunately, your campaign was not approved. Please review the feedback and try creating a new campaign.</p>
                                             </div>
-                                        )}
-                                        {/* Status alerts... */}
-                                        {campaign.status === 'pending' && (
-                                            <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
+                                        </div>
+                                    )}
+
+                                    {/* Stats Cards */}
+                                    <div className="stats-grid">
+                                        <div
+                                            className="stat-card primary"
+                                            onClick={() => setActiveTab('campaign')}
+                                            style={{ cursor: 'pointer' }}
+                                            title="View Campaign Details"
+                                        >
+                                            <div className="stat-icon">
+                                                <DollarSign size={24} />
+                                            </div>
+                                            <div className="stat-info">
+                                                <span className="stat-value">R{(campaign.raised || 0).toLocaleString()}</span>
+                                                <span className="stat-label">Total Raised</span>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            className="stat-card success"
+                                            onClick={handleShowDonors}
+                                            style={{ cursor: 'pointer' }}
+                                            title="View Donor List"
+                                        >
+                                            <div className="stat-icon">
+                                                <Users size={24} />
+                                            </div>
+                                            <div className="stat-info">
+                                                <span className="stat-value">{campaign.donors || 0}</span>
+                                                <span className="stat-label">Total Donors</span>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            className="stat-card warning"
+                                            onClick={() => setActiveTab('campaign')}
+                                            style={{ cursor: 'pointer' }}
+                                            title="View Campaign Details"
+                                        >
+                                            <div className="stat-icon">
+                                                <TrendingUp size={24} />
+                                            </div>
+                                            <div className="stat-info">
+                                                <span className="stat-value">{Math.round(percentFunded)}%</span>
+                                                <span className="stat-label">Goal Progress</span>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            className="stat-card info"
+                                            onClick={() => setShowExtendModal(true)}
+                                            style={{ cursor: 'pointer' }}
+                                            title="Click to extend campaign duration"
+                                        >
+                                            <div className="stat-icon">
                                                 <Clock size={24} />
-                                                <div>
-                                                    <h4>Campaign Pending Approval</h4>
-                                                    <p>Your campaign is being reviewed by our team. It will go live once approved. This typically takes 24-48 hours.</p>
-                                                </div>
                                             </div>
-                                        )}
-
-                                        {campaign.status === 'rejected' && (
-                                            <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-6)' }}>
-                                                <XCircle size={24} />
-                                                <div>
-                                                    <h4>Campaign Not Approved</h4>
-                                                    <p>Unfortunately, your campaign was not approved. Please review the feedback and try creating a new campaign.</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Stats Cards */}
-                                        <div className="stats-grid">
-                                            <div
-                                                className="stat-card primary"
-                                                onClick={() => setActiveTab('campaign')}
-                                                style={{ cursor: 'pointer' }}
-                                                title="View Campaign Details"
-                                            >
-                                                <div className="stat-icon">
-                                                    <DollarSign size={24} />
-                                                </div>
-                                                <div className="stat-info">
-                                                    <span className="stat-value">R{(campaign.raised || 0).toLocaleString()}</span>
-                                                    <span className="stat-label">Total Raised</span>
-                                                </div>
-                                            </div>
-
-                                            <div
-                                                className="stat-card success"
-                                                onClick={handleShowDonors}
-                                                style={{ cursor: 'pointer' }}
-                                                title="View Donor List"
-                                            >
-                                                <div className="stat-icon">
-                                                    <Users size={24} />
-                                                </div>
-                                                <div className="stat-info">
-                                                    <span className="stat-value">{campaign.donors || 0}</span>
-                                                    <span className="stat-label">Total Donors</span>
-                                                </div>
-                                            </div>
-
-                                            <div
-                                                className="stat-card warning"
-                                                onClick={() => setActiveTab('campaign')}
-                                                style={{ cursor: 'pointer' }}
-                                                title="View Campaign Details"
-                                            >
-                                                <div className="stat-icon">
-                                                    <TrendingUp size={24} />
-                                                </div>
-                                                <div className="stat-info">
-                                                    <span className="stat-value">{Math.round(percentFunded)}%</span>
-                                                    <span className="stat-label">Goal Progress</span>
-                                                </div>
-                                            </div>
-
-                                            <div
-                                                className="stat-card info"
-                                                onClick={() => setShowExtendModal(true)}
-                                                style={{ cursor: 'pointer' }}
-                                                title="Click to extend campaign duration"
-                                            >
-                                                <div className="stat-icon">
-                                                    <Clock size={24} />
-                                                </div>
-                                                <div className="stat-info">
-                                                    <span className="stat-value">{campaign.daysLeft || 0}</span>
-                                                    <span className="stat-label">Days Left (Extend)</span>
-                                                </div>
+                                            <div className="stat-info">
+                                                <span className="stat-value">{campaign.daysLeft || 0}</span>
+                                                <span className="stat-label">Days Left (Extend)</span>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        {/* Rest of Overview Content */}
-                                        <div className="card">
-                                            <div className="card-header">
-                                                <h2 className="card-title">Campaign Progress</h2>
-                                                <Link to={`/campaign/${campaign.id}`} className="card-link">
-                                                    <Eye size={18} /> View Campaign
-                                                </Link>
-                                            </div>
-                                            <div className="card-body">
-                                                <div className="progress-section">
-                                                    <div className="progress-header">
-                                                        <span className="progress-raised">R{(campaign.raised || 0).toLocaleString()}</span>
-                                                        <span className="progress-goal">of R{(campaign.goal || 0).toLocaleString()}</span>
-                                                    </div>
-                                                    <div className="progress-bar large">
-                                                        <div
-                                                            className="progress-bar-fill"
-                                                            style={{ width: `${percentFunded}%` }}
-                                                        />
-                                                    </div>
-                                                    <p className="progress-remaining">
-                                                        R{Math.max(0, (campaign.goal || 0) - (campaign.raised || 0)).toLocaleString()} still needed to reach your goal
-                                                    </p>
+                                    {/* Rest of Overview Content */}
+                                    <div className="card">
+                                        <div className="card-header">
+                                            <h2 className="card-title">Campaign Progress</h2>
+                                            <Link to={`/campaign/${campaign.id}`} className="card-link">
+                                                <Eye size={18} /> View Campaign
+                                            </Link>
+                                        </div>
+                                        <div className="card-body">
+                                            <div className="progress-section">
+                                                <div className="progress-header">
+                                                    <span className="progress-raised">R{(campaign.raised || 0).toLocaleString()}</span>
+                                                    <span className="progress-goal">of R{(campaign.goal || 0).toLocaleString()}</span>
                                                 </div>
+                                                <div className="progress-bar large">
+                                                    <div
+                                                        className="progress-bar-fill"
+                                                        style={{ width: `${percentFunded}%` }}
+                                                    />
+                                                </div>
+                                                <p className="progress-remaining">
+                                                    R{Math.max(0, (campaign.goal || 0) - (campaign.raised || 0)).toLocaleString()} still needed to reach your goal
+                                                </p>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        {/* Share, Recent Donations sections... */}
-                                        {/* Note: I am not repeating the whole file content here as I only need to target replace/insert. 
+                                    {/* Share, Recent Donations sections... */}
+                                    {/* Note: I am not repeating the whole file content here as I only need to target replace/insert. 
                                             I should be careful with the replacement chunk to not delete subsequent code.
                                             However, since the file is large, I'll return the modified chunks properly.
                                         */}
 
-                                        <div className="card">
-                                            <div className="card-header">
-                                                <h2 className="card-title">Share Your Campaign</h2>
+                                    <div className="card">
+                                        <div className="card-header">
+                                            <h2 className="card-title">Share Your Campaign</h2>
+                                        </div>
+                                        <div className="card-body">
+                                            <p className="mb-4 text-gray-600">
+                                                Share your campaign link with friends, family, and on social media to reach more potential donors.
+                                            </p>
+                                            <div className="share-link-group" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                <div className="amount-input-wrapper" style={{ flex: 1, marginBottom: 0, minWidth: '200px' }}>
+                                                    <LinkIcon size={18} className="currency-prefix" style={{ color: '#64748b' }} />
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        className="form-input"
+                                                        style={{ paddingLeft: '40px' }}
+                                                        value={`${window.location.origin}/campaign/${campaign.id}`}
+                                                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                    />
+                                                </div>
+                                                <button
+                                                    className="btn btn-primary"
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/campaign/${campaign.id}`;
+                                                        navigator.clipboard.writeText(url);
+                                                        alert("Campaign link copied to clipboard!");
+                                                    }}
+                                                >
+                                                    <Share2 size={18} />
+                                                    <span>Copy Link</span>
+                                                </button>
                                             </div>
-                                            <div className="card-body">
-                                                <p className="mb-4 text-gray-600">
-                                                    Share your campaign link with friends, family, and on social media to reach more potential donors.
-                                                </p>
-                                                <div className="share-link-group" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                                    <div className="amount-input-wrapper" style={{ flex: 1, marginBottom: 0, minWidth: '200px' }}>
-                                                        <LinkIcon size={18} className="currency-prefix" style={{ color: '#64748b' }} />
-                                                        <input
-                                                            type="text"
-                                                            readOnly
-                                                            className="form-input"
-                                                            style={{ paddingLeft: '40px' }}
-                                                            value={`${window.location.origin}/campaign/${campaign.id}`}
-                                                            onClick={(e) => (e.target as HTMLInputElement).select()}
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        className="btn btn-primary"
-                                                        onClick={() => {
-                                                            const url = `${window.location.origin}/campaign/${campaign.id}`;
-                                                            navigator.clipboard.writeText(url);
-                                                            alert("Campaign link copied to clipboard!");
-                                                        }}
-                                                    >
-                                                        <Share2 size={18} />
-                                                        <span>Copy Link</span>
-                                                    </button>
-                                                </div>
-                                                <div className="share-social-links" style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-                                                    <a
-                                                        href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="btn btn-secondary"
-                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
-                                                        title="Share on Facebook"
-                                                    >
-                                                        <Facebook size={20} style={{ color: '#1877F2' }} />
-                                                    </a>
-                                                    <a
-                                                        href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}&text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title}`)}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="btn btn-secondary"
-                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
-                                                        title="Share on Twitter"
-                                                    >
-                                                        <Twitter size={20} style={{ color: '#1DA1F2' }} />
-                                                    </a>
-                                                    <a
-                                                        href={`https://wa.me/?text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title} ${window.location.origin}/campaign/${campaign.id}`)}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="btn btn-secondary"
-                                                        style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
-                                                        title="Share on WhatsApp"
-                                                    >
-                                                        <MessageSquare size={20} style={{ color: '#25D366' }} />
-                                                    </a>
-                                                </div>
+                                            <div className="share-social-links" style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                                                <a
+                                                    href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn btn-secondary"
+                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    title="Share on Facebook"
+                                                >
+                                                    <Facebook size={20} style={{ color: '#1877F2' }} />
+                                                </a>
+                                                <a
+                                                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/campaign/${campaign.id}`)}&text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title}`)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn btn-secondary"
+                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    title="Share on Twitter"
+                                                >
+                                                    <Twitter size={20} style={{ color: '#1DA1F2' }} />
+                                                </a>
+                                                <a
+                                                    href={`https://wa.me/?text=${encodeURIComponent(`Check out my campaign on UniFund: ${campaign.title} ${window.location.origin}/campaign/${campaign.id}`)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn btn-secondary"
+                                                    style={{ flex: 1, padding: '10px', display: 'flex', justifyContent: 'center' }}
+                                                    title="Share on WhatsApp"
+                                                >
+                                                    <MessageSquare size={20} style={{ color: '#25D366' }} />
+                                                </a>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        <div className="card">
-                                            <div className="card-header">
-                                                <h2 className="card-title">Recent Donations</h2>
-                                            </div>
-                                            <div className="donations-list">
-                                                {recentDonations.length > 0 ? recentDonations.map((donation) => (
-                                                    <div key={donation.id} className="donation-item">
-                                                        <div className="donor-avatar">
-                                                            {donation.anonymous ? '?' : donation.name[0]}
-                                                        </div>
-                                                        <div className="donor-info">
-                                                            <span className="donor-name">{donation.name}</span>
-                                                            <span className="donation-date">{donation.date}</span>
-                                                        </div>
-                                                        <span className="donation-amount">+R{donation.amount.toLocaleString()}</span>
-                                                    </div>
-                                                )) : (
-                                                    <p className="text-gray-500 text-center py-4">No donations yet.</p>
-                                                )}
-                                            </div>
+                                    <div className="card">
+                                        <div className="card-header">
+                                            <h2 className="card-title">Recent Donations</h2>
                                         </div>
-                                    </>
-                                )}
-                            </>
-                        )
+                                        <div className="donations-list">
+                                            {recentDonations.length > 0 ? recentDonations.map((donation) => (
+                                                <div key={donation.id} className="donation-item">
+                                                    <div className="donor-avatar">
+                                                        {donation.isAnonymous ? '?' : donation.name[0]}
+                                                    </div>
+                                                    <div className="donor-info">
+                                                        <span className="donor-name">{donation.name}</span>
+                                                        <span className="donation-date">{donation.date}</span>
+                                                    </div>
+                                                    <span className="donation-amount">+R{donation.amount.toLocaleString()}</span>
+                                                </div>
+                                            )) : (
+                                                <p className="text-gray-500 text-center py-4">No donations yet.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )
                     }
 
                     {/* ... (Danger Zone and other tabs are untouched) */}
@@ -1222,6 +984,17 @@ const StudentDashboard: React.FC = () => {
                                                     ))}
                                                 </div>
                                             </div>
+
+                                            {campaign.isPaused && pendingMilestone && (
+                                                <div id="milestone-upload-section" className="mt-8 pt-8 border-t border-gray-100">
+                                                    <MilestoneUpload
+                                                        campaignId={campaign.id}
+                                                        studentId={user?.id || ''}
+                                                        milestonePercentage={pendingMilestone.milestone_percentage}
+                                                        onSuccess={() => window.location.reload()}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -1286,17 +1059,43 @@ const StudentDashboard: React.FC = () => {
                                         }}
                                         onCancel={() => setActiveTab('overview')}
                                     /> : <div>Loading university info...</div>
-                            ) : (
+                            ) : user?.student?.verificationStatus === 'pending' ? (
                                 <div className="card text-center py-12">
-                                    <AlertCircle size={48} className="mx-auto mb-4 text-warning" />
-                                    <h3 className="text-lg font-semibold mb-2">Verification Required</h3>
-                                    <p className="text-gray-500 mb-6">
-                                        Your account must be verified by an administrator before you can create a campaign.
-                                        Check your verification status on the overview tab.
+                                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-100 text-blue-600 mb-6">
+                                        <Clock size={40} />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900 mb-2">Verification Pending</h3>
+                                    <p className="text-gray-600 max-w-md mx-auto mb-6">
+                                        Your documents are currently being reviewed by our administrators. This process typically takes 24-48 hours.
+                                        You will be notified once your account is verified.
                                     </p>
                                     <button className="btn btn-secondary" onClick={() => setActiveTab('overview')}>
                                         Back to Overview
                                     </button>
+                                </div>
+                            ) : (
+                                <div className="card">
+                                    <div className="card-header border-b border-gray-100 p-6">
+                                        <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                            <ShieldCheck size={24} className="text-primary-600" />
+                                            Verification Required
+                                        </h3>
+                                    </div>
+                                    <div className="card-body p-6">
+                                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                                            <div className="flex gap-3">
+                                                <AlertCircle className="text-yellow-600 shrink-0 mt-0.5" size={20} />
+                                                <div>
+                                                    <h4 className="font-bold text-yellow-800">You need to verify your account first</h4>
+                                                    <p className="text-yellow-700 text-sm mt-1">
+                                                        To ensure the safety of our platform and build trust with donors, we require all students to verified their identity and enrollment status before creating a campaign.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <StudentVerificationForm user={user} onSuccess={() => window.location.reload()} />
+                                    </div>
                                 </div>
                             )
                         )
@@ -1576,7 +1375,7 @@ const StudentDashboard: React.FC = () => {
                                             <div key={donation.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold text-sm">
-                                                        {donation.anonymous ? '?' : donation.name.charAt(0)}
+                                                        {donation.isAnonymous ? '?' : donation.name.charAt(0)}
                                                     </div>
                                                     <div>
                                                         <p className="font-semibold text-gray-900">{donation.name}</p>
@@ -1596,45 +1395,6 @@ const StudentDashboard: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
-            )}
-            {showMilestoneModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h3>Upload Fee Statement</h3>
-                        <p className="mb-4 text-gray-600">
-                            Please upload your latest fee statement to verify your funding needs.
-                            This is required to unpause your campaign.
-                        </p>
-                        <form onSubmit={handleMilestoneUpload}>
-                            <div className="form-group">
-                                <label className="form-label">Fee Statement (PDF/Image)</label>
-                                <input
-                                    type="file"
-                                    accept=".pdf,.png,.jpg,.jpeg"
-                                    className="form-input"
-                                    onChange={(e) => setMilestoneFile(e.target.files?.[0] || null)}
-                                    required
-                                />
-                            </div>
-                            <div className="modal-actions">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => setShowMilestoneModal(false)}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={!milestoneFile || uploadingMilestone}
-                                >
-                                    {uploadingMilestone ? 'Uploading...' : 'Submit for Review'}
-                                </button>
-                            </div>
-                        </form>
                     </div>
                 </div>
             )}
@@ -1660,8 +1420,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     isEditing = false
 }) => {
     const [step, setStep] = useState(0); // Always start at 0 to allow type selection check
-    const [campaignType, setCampaignType] = useState<'standard' | 'quick_assist'>(
-        initialData?.type || (initialData?.isUrgent ? 'quick_assist' : 'standard')
+    const [campaignType, setCampaignType] = useState<'standard' | 'quick'>(
+        initialData?.type || (initialData?.isUrgent ? 'quick' : 'standard')
     );
     const [submitting, setSubmitting] = useState(false);
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -1694,7 +1454,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const updateBreakdownAmount = (id: string, amount: number) => {
         setFormData(prev => ({
             ...prev,
-            fundingBreakdown: prev.fundingBreakdown.map(item =>
+            fundingBreakdown: prev.fundingBreakdown.map((item: any) =>
                 item.id === id ? { ...item, amount } : item
             )
         }));
@@ -1703,7 +1463,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const updateBreakdownName = (id: string, name: string) => {
         setFormData(prev => ({
             ...prev,
-            fundingBreakdown: prev.fundingBreakdown.map(item =>
+            fundingBreakdown: prev.fundingBreakdown.map((item: any) =>
                 item.id === id ? { ...item, name } : item
             )
         }));
@@ -1722,11 +1482,11 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const removeBreakdownItem = (id: string) => {
         setFormData(prev => ({
             ...prev,
-            fundingBreakdown: prev.fundingBreakdown.filter(item => item.id !== id)
+            fundingBreakdown: prev.fundingBreakdown.filter((item: any) => item.id !== id)
         }));
     };
 
-    const totalBreakdown = formData.fundingBreakdown.reduce((sum, item) => sum + item.amount, 0);
+    const totalBreakdown = formData.fundingBreakdown.reduce((sum: number, item: any) => sum + item.amount, 0);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -1820,7 +1580,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                 story: formData.story,
                 goal_amount: parseFloat(formData.goal),
                 category: formData.category,
-                is_urgent: campaignType === 'quick_assist',
+                is_urgent: campaignType === 'quick',
                 type: campaignType,
                 end_date: formData.endDate,
                 invoice_url: invoiceUrl,
@@ -1974,11 +1734,11 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 </div>
 
                                 <div
-                                    className={`card p-6 cursor-pointer border-2 transition-all ${campaignType === 'quick_assist' ? 'border-primary-500 bg-primary-50' : 'border-transparent hover:border-gray-200'}`}
-                                    onClick={() => setCampaignType('quick_assist')}
+                                    className={`card p-6 cursor-pointer border-2 transition-all ${campaignType === 'quick' ? 'border-primary-500 bg-primary-50' : 'border-transparent hover:border-gray-200'}`}
+                                    onClick={() => setCampaignType('quick')}
                                 >
                                     <div className="flex items-center gap-4 mb-4">
-                                        <div className={`p-3 rounded-full ${campaignType === 'quick_assist' ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
+                                        <div className={`p-3 rounded-full ${campaignType === 'quick' ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
                                             <AlertCircle size={24} />
                                         </div>
                                         <div>
@@ -1990,7 +1750,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         <li>Food, Stationary, App Fees</li>
                                         <li>Simplified creation process</li>
                                         <li>Urgent priority status</li>
-                                        <li>Paid out as lump sum</li>
+                                        <li>Direct payment to university</li>
                                     </ul>
                                 </div>
                             </div>
@@ -2009,8 +1769,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     type="button"
                                     className="btn btn-primary btn-lg w-full md:w-auto"
                                     onClick={() => {
-                                        if (campaignType === 'quick_assist') {
-                                            // Reset breakdown for quick assist to single item
+                                        if (campaignType === 'quick') {
+                                            // Reset breakdown for quick to single item
                                             setFormData(prev => ({
                                                 ...prev,
                                                 category: 'food',
@@ -2029,9 +1789,9 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                     {/* Step 1: Basic Info */}
                     {step === 1 && (
                         <div className="campaign-form-step">
-                            <h3>{campaignType === 'quick_assist' ? 'Quick Assist Details' : 'Campaign Basic Information'}</h3>
+                            <h3>{campaignType === 'quick' ? 'Quick Assist Details' : 'Campaign Basic Information'}</h3>
                             <p className="form-description">
-                                {campaignType === 'quick_assist'
+                                {campaignType === 'quick'
                                     ? 'Provide details for your urgent request.'
                                     : 'Tell us about your campaign. This will be the first thing potential donors see.'}
                             </p>
@@ -2058,7 +1818,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     }}
                                 >
                                     {CAMPAIGN_CATEGORIES
-                                        .filter(c => campaignType === 'quick_assist'
+                                        .filter(c => campaignType === 'quick'
                                             ? ['food', 'application_fee', 'registration_fee', 'stationary'].includes(c.value)
                                             : !['food', 'application_fee', 'registration_fee', 'stationary'].includes(c.value)
                                         )
@@ -2075,7 +1835,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     id="campaign-title"
                                     name="title"
                                     className="form-input"
-                                    placeholder={campaignType === 'quick_assist' ? "e.g., Urgent Food Assistance Needed" : "e.g., Help me complete my Computer Science degree"}
+                                    placeholder={campaignType === 'quick' ? "e.g., Urgent Food Assistance Needed" : "e.g., Help me complete my Computer Science degree"}
                                     value={formData.title}
                                     onChange={(e) => updateFormData('title', e.target.value)}
                                 />
@@ -2090,14 +1850,14 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         id="campaign-goal"
                                         name="goal"
                                         className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                        placeholder={campaignType === 'quick_assist' ? "500" : "45000"}
+                                        placeholder={campaignType === 'quick' ? "500" : "45000"}
                                         value={formData.goal}
                                         disabled={hasDonations}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             updateFormData('goal', val);
                                             // Auto-update breakdown for quick assist
-                                            if (campaignType === 'quick_assist') {
+                                            if (campaignType === 'quick') {
                                                 updateBreakdownAmount('1', parseInt(val) || 0);
                                             }
                                         }}
@@ -2257,9 +2017,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <div>
                                     <h4>Payment Information</h4>
                                     <p>
-                                        {campaignType === 'quick_assist'
-                                            ? "Quick Assist funds are accumulated and paid out once the goal is reached."
-                                            : `All funds will be paid directly to ${university.name} using your student number as reference.`}
+                                        All donations are paid directly to {university.name} using your student number as reference.
+                                        Platform does not accumulate or hold funds.
                                     </p>
                                 </div>
                             </div>
@@ -2351,7 +2110,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                         <div className="campaign-form-step">
                             <h3>Funding Breakdown</h3>
                             <p className="form-description">
-                                {campaignType === 'quick_assist'
+                                {campaignType === 'quick'
                                     ? 'Start your campaign immediately.'
                                     : 'Explain specifically how the funds will be used. This helps build trust with donors.'}
                             </p>
@@ -2425,7 +2184,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 </div>
                             )}
 
-                            {campaignType === 'quick_assist' && (
+                            {campaignType === 'quick' && (
                                 <div className="summary-card">
                                     <h4>Request Summary</h4>
                                     <div className="summary-row">

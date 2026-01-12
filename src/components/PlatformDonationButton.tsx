@@ -68,6 +68,7 @@ const PlatformDonationButton: React.FC<PlatformDonationButtonProps> = ({ classNa
                     payment_reference: responseData.reference || responseData.trxref || reference,
                     proof_of_payment_url: 'paystack_ref_' + (responseData.reference || reference),
                     status: 'received', // Auto-verified since it's Paystack
+                    payment_status: 'completed',
                     guest_name: user ? `${user.student?.firstName} ${user.student?.lastName}`.trim() : 'Anonymous Donor',
                     guest_email: email || (user?.email)
                 });

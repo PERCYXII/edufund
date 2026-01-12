@@ -157,6 +157,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
                     is_anonymous: isAnonymous,
                     proof_of_payment_url: 'paystack_ref_' + (response.reference || paystackRef),
                     status: 'received', // Auto-verified
+                    payment_status: 'completed',
                     guest_name: isAnonymous ? 'Anonymous' : `${firstName} ${lastName}`.trim(),
                     guest_email: isAnonymous ? null : email
                 });
@@ -571,8 +572,6 @@ const CampaignDetail: React.FC = () => {
                         idUrl: c.id_url,
                         enrollmentUrl: c.enrollment_url,
                         invoiceUrl: c.invoice_url,
-                        isPaused: c.is_paused,
-                        lastMilestoneCleared: c.last_milestone_cleared,
                         createdAt: c.created_at,
                         updatedAt: c.updated_at,
                         student: {

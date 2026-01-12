@@ -6,7 +6,8 @@ import Footer from './components/Footer';
 import Landing from './pages/Landing';
 import Browse from './pages/Browse';
 import CampaignDetail from './pages/CampaignDetail';
-import StudentRegister from './pages/StudentRegister';
+import StudentRegister from './pages/StudentRegister'; // This is the split-layout profile form
+import SignUp from './pages/SignUp'; // This is the new sign-up page
 import CompleteProfile from './pages/CompleteProfile';
 import Login from './pages/Login';
 import StudentDashboard from './pages/StudentDashboard';
@@ -54,14 +55,17 @@ function App() {
                     <Route path="/" element={<Landing />} />
                     <Route path="/browse" element={<Browse />} />
                     <Route path="/campaign/:id" element={<CampaignDetail />} />
-                    <Route path="/signup" element={<StudentRegister />} />
+
+                    {/* Auth Flows */}
+                    <Route path="/signup" element={<SignUp />} />
                     <Route path="/register" element={<StudentRegister />} />
                     <Route path="/register/student" element={<StudentRegister />} />
+                    <Route path="/login" element={<Login />} />
+
                     <Route path="/complete-profile" element={<CompleteProfile />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/privacy" element={<Privacy />} />

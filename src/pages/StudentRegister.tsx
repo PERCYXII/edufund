@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, User, AlertCircle, ArrowRight, Phone, BookOpen, Calendar, GraduationCap, Building } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, AlertCircle, ArrowRight, Phone, BookOpen, Calendar, GraduationCap, Building } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { supabase } from '../lib/supabase';
 import type { University } from '../types';
 import './Register.css';
@@ -9,26 +10,36 @@ import './RegisterSplit.css';
 
 const StudentRegister: React.FC = () => {
     const navigate = useNavigate();
-    const { register, isLoggedIn, user, isLoading: authLoading } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
+    const { success } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [universities, setUniversities] = useState<University[]>([]);
     const [loadingUniversities, setLoadingUniversities] = useState(true);
 
-    // Redirect if already logged in
+    const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        universityId: '',
+        studentNumber: '',
+        course: '',
+        yearOfStudy: '',
+        expectedGraduation: '',
+        profileImage: null as File | null,
+        idDocument: null as File | null,
+        enrollmentDocument: null as File | null,
+        feeStatement: null as File | null
+    });
+
     useEffect(() => {
-        if (!authLoading && isLoggedIn && user) {
-            if (user.role === 'student') {
-                navigate('/dashboard');
-            } else if (user.role === 'admin') {
-                navigate('/admin');
-            } else {
-                navigate('/browse');
+        if (!authLoading) {
+            if (!user) {
+                navigate('/login');
             }
         }
-    }, [authLoading, isLoggedIn, user, navigate]);
+    }, [user, authLoading, navigate]);
 
-    // Fetch Universities
     useEffect(() => {
         const fetchUniversities = async () => {
             try {
@@ -49,36 +60,32 @@ const StudentRegister: React.FC = () => {
         fetchUniversities();
     }, []);
 
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-        confirmPassword: '',
-        firstName: '',
-        lastName: '',
-        phone: '',
-        universityId: '',
-        studentNumber: '',
-        course: '',
-        yearOfStudy: '',
-        expectedGraduation: ''
-    });
-
-    const updateFormData = (field: string, value: string) => {
+    const updateFormData = (field: string, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
         setErrorMessage(null);
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+        if (e.target.files && e.target.files[0]) {
+            if (e.target.files[0].size > 5 * 1024 * 1024) {
+                setErrorMessage("File size exceeds 5MB limit.");
+                return;
+            }
+            updateFormData(field, e.target.files[0]);
+        }
+    };
+
     const validateForm = (): boolean => {
-        if (!formData.email || !formData.password || !formData.confirmPassword || !formData.firstName || !formData.lastName || !formData.universityId || !formData.studentNumber) {
+        if (!formData.firstName || !formData.lastName || !formData.universityId || !formData.studentNumber) {
             setErrorMessage("Please fill in all required fields");
             return false;
         }
-        if (formData.password !== formData.confirmPassword) {
-            setErrorMessage("Passwords do not match");
+        if (!formData.profileImage) {
+            setErrorMessage("Please upload a profile image");
             return false;
         }
-        if (formData.password.length < 6) {
-            setErrorMessage("Password must be at least 6 characters");
+        if (!formData.idDocument || !formData.enrollmentDocument) {
+            setErrorMessage("Please upload ID and Proof of Enrollment");
             return false;
         }
         return true;
@@ -88,54 +95,83 @@ const StudentRegister: React.FC = () => {
         e.preventDefault();
 
         if (!validateForm()) return;
+        if (!user) return;
 
         setIsSubmitting(true);
         setErrorMessage(null);
 
         try {
-            // 1. Register User (Auth)
-            const registrationPayload = {
-                email: formData.email,
-                password: formData.password,
-                firstName: formData.firstName,
-                lastName: formData.lastName
-            };
+            const userId = user.id;
 
-            const { success, error, data } = await register('student', registrationPayload);
+            await supabase
+                .from('profiles')
+                .upsert({ id: userId, email: user.email, role: 'student' }, { onConflict: 'id' });
 
-            if (!success || !data?.user) {
-                throw new Error(error || 'Registration failed');
+            let profileImageUrl = null;
+            if (formData.profileImage) {
+                const fileExt = formData.profileImage.name.split('.').pop();
+                const fileName = `${userId}/profile_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('campaign-images')
+                    .upload(fileName, formData.profileImage);
+
+                if (uploadError) throw uploadError;
+
+                const { data: urlData } = supabase.storage
+                    .from('campaign-images')
+                    .getPublicUrl(fileName);
+                profileImageUrl = urlData.publicUrl;
             }
 
-            const userId = data.user.id;
-
-            // 2. Create Student Profile in Database
             const { error: studentError } = await supabase
                 .from('students')
-                .insert({
+                .upsert({
                     id: userId,
                     first_name: formData.firstName,
                     last_name: formData.lastName,
-                    email: formData.email,
                     phone: formData.phone,
                     university_id: formData.universityId,
                     student_number: formData.studentNumber,
                     course: formData.course,
                     year_of_study: formData.yearOfStudy,
-                    expected_graduation: formData.expectedGraduation,
-                    verification_status: 'unverified'
+                    expected_graduation: formData.expectedGraduation || null,
+                    verification_status: 'pending',
+                    profile_image_url: profileImageUrl
                 });
 
-            if (studentError) {
-                console.error("Error creating student profile:", studentError);
-                throw new Error("Account created but profile setup failed. Please contact support.");
-            }
+            if (studentError) throw studentError;
 
-            // 3. Redirect to Dashboard
+            const uploadDoc = async (file: File, type: string) => {
+                const fileExt = file.name.split('.').pop();
+                const fileName = `verification/${userId}/${type}_${Date.now()}.${fileExt}`;
+
+                const { error: uploadError, data } = await supabase.storage
+                    .from('documents')
+                    .upload(fileName, file);
+
+                if (uploadError) throw uploadError;
+
+                const { data: urlData } = supabase.storage
+                    .from('documents')
+                    .getPublicUrl(data.path);
+
+                await supabase.from('verification_requests').insert({
+                    student_id: userId,
+                    document_type: type,
+                    document_url: urlData.publicUrl,
+                    status: 'pending'
+                });
+            };
+
+            if (formData.idDocument) await uploadDoc(formData.idDocument, 'id_document');
+            if (formData.enrollmentDocument) await uploadDoc(formData.enrollmentDocument, 'proof_of_enrollment');
+            if (formData.feeStatement) await uploadDoc(formData.feeStatement, 'fee_statement');
+
+            success('Profile Completed!', 'Your details have been saved correctly.');
             navigate('/dashboard');
 
         } catch (error: any) {
-            console.error("Registration error:", error);
+            console.error("Registration error:", error.message || error);
             setErrorMessage(error.message || "Registration failed. Please try again.");
         } finally {
             setIsSubmitting(false);
@@ -150,14 +186,12 @@ const StudentRegister: React.FC = () => {
         <div className="register-page">
             <div className="register-container wide">
                 <div className="register-split-card">
-
-                    {/* Left Side - Info */}
                     <div className="register-side-panel">
                         <div>
                             <div className="register-side-header">
                                 <User size={48} className="mb-4 text-white" />
-                                <h2 className="register-side-title">Student Sign Up</h2>
-                                <p className="register-side-subtitle">Join thousands of students funding their education.</p>
+                                <h2 className="register-side-title">Complete Profile</h2>
+                                <p className="register-side-subtitle">Just a few more details to get you started.</p>
                             </div>
 
                             <div className="register-side-content">
@@ -167,7 +201,7 @@ const StudentRegister: React.FC = () => {
                                     </div>
                                     <div>
                                         <h4>Tell Your Story</h4>
-                                        <p>Create a compelling campaign to share your journey.</p>
+                                        <p>Your academic background helps donors connect with you.</p>
                                     </div>
                                 </div>
                                 <div className="side-feature">
@@ -179,24 +213,10 @@ const StudentRegister: React.FC = () => {
                                         <p>Link your university profile for trust and credibility.</p>
                                     </div>
                                 </div>
-                                <div className="side-feature">
-                                    <div className="side-feature-icon">
-                                        <GraduationCap size={20} color="white" />
-                                    </div>
-                                    <div>
-                                        <h4>Receive Funding</h4>
-                                        <p>Get donations directly for your tuition and needs.</p>
-                                    </div>
-                                </div>
                             </div>
-                        </div>
-
-                        <div className="register-side-footer">
-                            Already have an account? <Link to="/login">Login here</Link>
                         </div>
                     </div>
 
-                    {/* Right Side - Form */}
                     <div className="register-form-panel">
                         {errorMessage && (
                             <div className="alert alert-warning mb-6">
@@ -206,8 +226,6 @@ const StudentRegister: React.FC = () => {
                         )}
 
                         <form onSubmit={handleSubmit}>
-
-                            {/* Personal Info Section */}
                             <h3 className="form-section-title">
                                 <User size={20} /> Personal Information
                             </h3>
@@ -248,7 +266,55 @@ const StudentRegister: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Academic Info Section */}
+                            <h3 className="form-section-title mt-8">
+                                <AlertCircle size={20} /> Verification Documents
+                            </h3>
+                            <div className="form-grid">
+                                <div className="form-group">
+                                    <label className="split-form-label">Profile Image *</label>
+                                    <input
+                                        type="file"
+                                        className="split-form-input"
+                                        accept="image/*"
+                                        onChange={(e) => handleFileChange(e, 'profileImage')}
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Upload a clear photo of yourself (Max 5MB).</p>
+                                </div>
+                                <div className="form-group">
+                                    <label className="split-form-label">Certified ID Document / Passport *</label>
+                                    <input
+                                        type="file"
+                                        className="split-form-input"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onChange={(e) => handleFileChange(e, 'idDocument')}
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">PDF, JPG or PNG (Max 5MB).</p>
+                                </div>
+                                <div className="form-group">
+                                    <label className="split-form-label">Proof of Enrollment *</label>
+                                    <input
+                                        type="file"
+                                        className="split-form-input"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onChange={(e) => handleFileChange(e, 'enrollmentDocument')}
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Official letter from your university.</p>
+                                </div>
+                                <div className="form-group">
+                                    <label className="split-form-label">Fee Statement (Optional)</label>
+                                    <input
+                                        type="file"
+                                        className="split-form-input"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onChange={(e) => handleFileChange(e, 'feeStatement')}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Latest financial statement.</p>
+                                </div>
+                            </div>
+
                             <h3 className="form-section-title mt-8">
                                 <GraduationCap size={20} /> Academic Profile
                             </h3>
@@ -289,6 +355,10 @@ const StudentRegister: React.FC = () => {
                                         <option value="1st Year">1st Year</option>
                                         <option value="2nd Year">2nd Year</option>
                                         <option value="3rd Year">3rd Year</option>
+                                        <option value="4th Year">4th Year</option>
+                                        <option value="5th Year">5th Year</option>
+                                        <option value="6th Year">6th Year</option>
+                                        <option value="7th Year">7th Year</option>
                                         <option value="Honours">Honours</option>
                                         <option value="Masters">Masters</option>
                                         <option value="PhD">PhD</option>
@@ -319,62 +389,6 @@ const StudentRegister: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Account Security */}
-                            <h3 className="form-section-title mt-8">
-                                <Lock size={20} /> Account Security
-                            </h3>
-                            <div className="form-grid">
-                                <div className="form-group">
-                                    <label className="split-form-label">Email Address *</label>
-                                    <div className="input-with-icon" style={{ position: 'relative' }}>
-                                        <Mail size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
-                                        <input
-                                            type="email"
-                                            className="split-form-input"
-                                            style={{ paddingLeft: '40px' }}
-                                            placeholder="student@university.ac.za"
-                                            value={formData.email}
-                                            onChange={(e) => updateFormData('email', e.target.value)}
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div className="form-grid form-grid-2" style={{ marginBottom: 0 }}>
-                                    <div className="form-group">
-                                        <label className="split-form-label">Password *</label>
-                                        <div className="input-with-icon" style={{ position: 'relative' }}>
-                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
-                                            <input
-                                                type="password"
-                                                className="split-form-input"
-                                                style={{ paddingLeft: '40px' }}
-                                                placeholder="••••••••"
-                                                value={formData.password}
-                                                onChange={(e) => updateFormData('password', e.target.value)}
-                                                required
-                                                minLength={6}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="form-group">
-                                        <label className="split-form-label">Confirm Password *</label>
-                                        <div className="input-with-icon" style={{ position: 'relative' }}>
-                                            <Lock size={18} className="input-icon" style={{ position: 'absolute', left: '12px', top: '14px', color: '#9ca3af', zIndex: 10 }} />
-                                            <input
-                                                type="password"
-                                                className="split-form-input"
-                                                style={{ paddingLeft: '40px' }}
-                                                placeholder="••••••••"
-                                                value={formData.confirmPassword}
-                                                onChange={(e) => updateFormData('confirmPassword', e.target.value)}
-                                                required
-                                                minLength={6}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
                             <button
                                 type="submit"
                                 className="w-full btn btn-primary mt-8 py-3 text-lg"
@@ -383,7 +397,7 @@ const StudentRegister: React.FC = () => {
                                 {isSubmitting ? (
                                     <>Processing...</>
                                 ) : (
-                                    <>Create Account <ArrowRight size={20} /></>
+                                    <>Complete Profile <ArrowRight size={20} /></>
                                 )}
                             </button>
                         </form>
