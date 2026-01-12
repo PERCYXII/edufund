@@ -60,8 +60,6 @@ export interface Campaign {
   startDate: string;
   endDate: string;
   status: 'draft' | 'pending' | 'active' | 'completed' | 'expired' | 'rejected';
-  isPaused?: boolean;
-  lastMilestoneCleared?: number;
   type: 'standard' | 'quick';
   category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
   isUrgent: boolean;

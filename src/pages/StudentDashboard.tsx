@@ -42,7 +42,6 @@ import { CAMPAIGN_CATEGORIES } from '../data/constants';
 import './Dashboard.css';
 import './Modal.css';
 import StudentVerificationForm from '../components/StudentVerificationForm';
-import MilestoneUpload from '../components/MilestoneUpload';
 
 // Local interface for dashboard display
 interface DashboardDonation {
@@ -85,7 +84,6 @@ const StudentDashboard: React.FC = () => {
     const [allDonations, setAllDonations] = useState<DashboardDonation[]>([]);
     const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
-    const [pendingMilestone, setPendingMilestone] = useState<any>(null);
 
     // Verification state
     // Verification state - Refactored to component
@@ -309,28 +307,11 @@ const StudentDashboard: React.FC = () => {
                         idUrl: rawCampaign.id_url,
                         enrollmentUrl: rawCampaign.enrollment_url,
                         videoUrl: rawCampaign.video_url,
-                        isPaused: rawCampaign.is_paused,
-                        lastMilestoneCleared: rawCampaign.last_milestone_cleared,
                         createdAt: rawCampaign.created_at,
                         updatedAt: rawCampaign.updated_at
                     };
 
                     setCampaign(mappedCampaign as unknown as CampaignWithStudent);
-
-                    // Fetch Pending Milestone if paused
-                    if (rawCampaign.is_paused) {
-                        const { data: milestones } = await supabase
-                            .from('campaign_milestones')
-                            .select('*')
-                            .eq('campaign_id', rawCampaign.id)
-                            .order('milestone_percentage', { ascending: true }); // Get lowest uncleared?
-
-                        // Pick the first one that is pending upload or rejected (needs retry)
-                        const pending = milestones?.find(m => m.status === 'pending_upload' || m.status === 'rejected');
-                        if (pending) {
-                            setPendingMilestone(pending);
-                        }
-                    }
 
                     // Fetch Recent Donations
                     const { data: donations, error: donationError } = await supabase
@@ -655,24 +636,7 @@ const StudentDashboard: React.FC = () => {
                                 </div>
                             ) : (
                                 <>
-                                    {campaign.isPaused && (
-                                        <div className="alert alert-warning mb-6 border-2 border-amber-300 bg-amber-50">
-                                            <AlertCircle size={24} className="text-amber-600" />
-                                            <div className="flex-1">
-                                                <h4 className="font-bold text-amber-800">Campaign Paused</h4>
-                                                <p className="text-amber-700">
-                                                    Your campaign is paused at the <strong>{pendingMilestone?.milestone_percentage || campaign.lastMilestoneCleared || 15}%</strong> milestone.
-                                                    To continue receiving donations, please upload an updated fee statement or proof of university payment.
-                                                </p>
-                                                <button
-                                                    className="btn btn-warning btn-sm mt-3"
-                                                    onClick={() => setActiveTab('campaign')}
-                                                >
-                                                    Take Action
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
+
 
                                     {/* Status alerts... */}
                                     {campaign.status === 'pending' && (
@@ -985,16 +949,7 @@ const StudentDashboard: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {campaign.isPaused && pendingMilestone && (
-                                                <div id="milestone-upload-section" className="mt-8 pt-8 border-t border-gray-100">
-                                                    <MilestoneUpload
-                                                        campaignId={campaign.id}
-                                                        studentId={user?.id || ''}
-                                                        milestonePercentage={pendingMilestone.milestone_percentage}
-                                                        onSuccess={() => window.location.reload()}
-                                                    />
-                                                </div>
-                                            )}
+
                                         </div>
                                     </div>
 
