@@ -36,12 +36,6 @@
     background: linear-gradient(135deg, rgba(15, 32, 48, 0.95) 0%, rgba(16, 185, 129, 0.4) 100%);
 }
 
-.terms-hero {
-    background-image: url('/images/terms-bg.png');
-    background-size: cover;
-    background-position: center;
-}
-
 .terms-hero::before {
     background: linear-gradient(135deg, rgba(15, 32, 48, 0.95) 0%, rgba(107, 114, 128, 0.4) 100%);
 }
