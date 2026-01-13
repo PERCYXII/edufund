@@ -179,9 +179,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
+                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
                     setIsLoading(true);
                     await fetchUserProfile(session.user);
+                } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+                    // Token refresh should be silent to avoid unmounting app state
+                    await fetchUserProfile(session.user, true);
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null);
                     setNotifications([]);
@@ -203,7 +206,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.user) {
                         // Don't set loading state to avoid UI flicker
-                        await fetchUserProfile(session.user);
+                        await fetchUserProfile(session.user, true);
                     }
                 }
             };

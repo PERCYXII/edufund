@@ -1400,6 +1400,15 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(initialData?.images?.[0] || null);
 
+    // Revoke blob URL when it changes or component unmounts to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (previewUrl && previewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
+    }, [previewUrl]);
+
     const [formData, setFormData] = useState({
         title: initialData?.title || '',
         story: initialData?.story || '',
