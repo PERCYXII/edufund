@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { FileText, GraduationCap, DollarSign, AlertCircle } from 'lucide-react';
+import { FileText, GraduationCap, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import type { User } from '../types';
 
 interface StudentVerificationFormProps {
@@ -9,6 +10,7 @@ interface StudentVerificationFormProps {
 }
 
 const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user, onSuccess }) => {
+    const toast = useToast();
     const [verificationSubmitting, setVerificationSubmitting] = useState(false);
     const [verificationFormData, setVerificationFormData] = useState({
         idDocument: null as File | null,
@@ -72,11 +74,11 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                 await supabase.from('notifications').insert(notifs);
             }
 
-            alert("Verification documents submitted successfully!");
+            toast.success("Verification documents submitted successfully!");
             onSuccess(); // Triggers reload or state update in parent
         } catch (error: any) {
             console.error("Verification submit error:", error);
-            alert("Failed to submit verification: " + error.message);
+            toast.error("Failed to submit verification: " + error.message);
         } finally {
             setVerificationSubmitting(false);
         }
@@ -104,7 +106,17 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             accept=".pdf,.png,.jpg,.jpeg"
                             required
-                            onChange={e => setVerificationFormData(prev => ({ ...prev, idDocument: e.target.files?.[0] || null }))}
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    if (file.size > 5 * 1024 * 1024) {
+                                        toast.error("File size exceeds 5MB limit.");
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    setVerificationFormData(prev => ({ ...prev, idDocument: file }));
+                                }
+                            }}
                         />
                         <div className="flex flex-col items-center">
                             <FileText size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
@@ -124,7 +136,17 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             accept=".pdf,.png,.jpg,.jpeg"
                             required
-                            onChange={e => setVerificationFormData(prev => ({ ...prev, enrollmentDocument: e.target.files?.[0] || null }))}
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    if (file.size > 5 * 1024 * 1024) {
+                                        toast.error("File size exceeds 5MB limit.");
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    setVerificationFormData(prev => ({ ...prev, enrollmentDocument: file }));
+                                }
+                            }}
                         />
                         <div className="flex flex-col items-center">
                             <GraduationCap size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
@@ -143,11 +165,22 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                             type="file"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             accept=".pdf,.png,.jpg,.jpeg"
-                            onChange={e => setVerificationFormData(prev => ({ ...prev, feeStatement: e.target.files?.[0] || null }))}
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    if (file.size > 5 * 1024 * 1024) {
+                                        toast.error("File size exceeds 5MB limit.");
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    setVerificationFormData(prev => ({ ...prev, feeStatement: file }));
+                                }
+                            }}
                         />
                         <div className="flex flex-col items-center">
                             <DollarSign size={32} className="text-gray-400 group-hover:text-primary-500 mb-2" />
-                            <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600">
+                            <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600 flex items-center gap-2">
+                                {verificationFormData.feeStatement && <CheckCircle size={16} className="text-green-500" />}
                                 {verificationFormData.feeStatement ? verificationFormData.feeStatement.name : 'Click to Upload Fee Statement'}
                             </span>
                             <span className="text-xs text-gray-500 mt-1">Latest Financial Statement</span>

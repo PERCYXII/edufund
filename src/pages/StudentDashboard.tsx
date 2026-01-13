@@ -264,7 +264,7 @@ const StudentDashboard: React.FC = () => {
             if (updateError) throw updateError;
 
             toast.success('Profile image updated successfully!');
-            await refreshUser(); // Refresh user context to show new image
+            await refreshUser(true); // Refresh user context to show new image
             await fetchVerificationStatus(); // Refresh status
             await fetchDashboardData(); // Refresh campaign data
 
@@ -1064,7 +1064,7 @@ const StudentDashboard: React.FC = () => {
                                         </div>
 
                                         <StudentVerificationForm user={user} onSuccess={async () => {
-                                            await refreshUser();
+                                            await refreshUser(true);
                                             await fetchVerificationStatus();
                                         }} />
                                     </div>
@@ -1196,7 +1196,7 @@ const StudentDashboard: React.FC = () => {
                                                             .eq('id', user.id);
                                                         if (error) throw error;
                                                         toast.success("Settings saved!");
-                                                        await refreshUser();
+                                                        await refreshUser(true);
                                                     } catch (err: any) {
                                                         toast.error("Failed to save: " + err.message);
                                                     } finally {
@@ -1464,6 +1464,11 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("Image size exceeds 5MB limit.");
+                e.target.value = '';
+                return;
+            }
             setImageFile(file);
             const url = URL.createObjectURL(file);
             setPreviewUrl(url);
@@ -1886,7 +1891,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             accept=".pdf,.jpg,.png"
                                             className="hidden"
                                             id="invoice-upload"
-                                            onChange={(e) => setFormData(prev => ({ ...prev, invoice: e.target.files?.[0] || null }))}
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    if (file.size > 5 * 1024 * 1024) {
+                                                        toast.error("File exceeds 5MB limit.");
+                                                        e.target.value = '';
+                                                        return;
+                                                    }
+                                                    setFormData(prev => ({ ...prev, invoice: file }));
+                                                }
+                                            }}
                                         />
                                         <label htmlFor="invoice-upload" className="cursor-pointer">
                                             <div className="flex flex-col items-center gap-2">
@@ -1921,7 +1936,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 type="file"
                                                 className="hidden"
                                                 id="fee-statement-upload"
-                                                onChange={(e) => setFormData(prev => ({ ...prev, feeStatement: e.target.files?.[0] || null }))}
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        if (file.size > 5 * 1024 * 1024) {
+                                                            toast.error("File exceeds 5MB limit.");
+                                                            e.target.value = '';
+                                                            return;
+                                                        }
+                                                        setFormData(prev => ({ ...prev, feeStatement: file }));
+                                                    }
+                                                }}
                                             />
                                             <label htmlFor="fee-statement-upload" className="cursor-pointer flex flex-col items-center gap-2">
                                                 {formData.feeStatement ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
@@ -1940,7 +1965,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 type="file"
                                                 className="hidden"
                                                 id="id-upload"
-                                                onChange={(e) => setFormData(prev => ({ ...prev, idDocument: e.target.files?.[0] || null }))}
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        if (file.size > 5 * 1024 * 1024) {
+                                                            toast.error("File exceeds 5MB limit.");
+                                                            e.target.value = '';
+                                                            return;
+                                                        }
+                                                        setFormData(prev => ({ ...prev, idDocument: file }));
+                                                    }
+                                                }}
                                             />
                                             <label htmlFor="id-upload" className="cursor-pointer flex flex-col items-center gap-2">
                                                 {formData.idDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
@@ -1959,7 +1994,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 type="file"
                                                 className="hidden"
                                                 id="enrollment-upload"
-                                                onChange={(e) => setFormData(prev => ({ ...prev, enrollmentDocument: e.target.files?.[0] || null }))}
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        if (file.size > 5 * 1024 * 1024) {
+                                                            toast.error("File exceeds 5MB limit.");
+                                                            e.target.value = '';
+                                                            return;
+                                                        }
+                                                        setFormData(prev => ({ ...prev, enrollmentDocument: file }));
+                                                    }
+                                                }}
                                             />
                                             <label htmlFor="enrollment-upload" className="cursor-pointer flex flex-col items-center gap-2">
                                                 {formData.enrollmentDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}

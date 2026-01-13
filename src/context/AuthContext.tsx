@@ -20,7 +20,7 @@ interface AuthContextType {
     resetPasswordForEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
     updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>;
     markNotificationAsRead: (id: string) => void;
-    refreshUser: () => Promise<void>;
+    refreshUser: (silent?: boolean) => Promise<void>;
 }
 
 // ============================================
@@ -42,13 +42,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const isFetchingRef = React.useRef(false);
 
     // Fetch user profile based on auth session
-    const fetchUserProfile = async (sessionUser: any) => {
+    const fetchUserProfile = async (sessionUser: any, silent: boolean = false) => {
         // Prevent duplicate fetches
         if (isFetchingRef.current) {
             return null;
         }
         isFetchingRef.current = true;
-        setIsLoading(true);
+        if (!silent) setIsLoading(true);
         try {
             // Get profile to check role
             const { data: profile, error: profileError } = await supabase
@@ -161,7 +161,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             return null;
         } finally {
             isFetchingRef.current = false;
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -403,10 +403,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             .eq('id', id);
     };
 
-    const refreshUser = async () => {
+    const refreshUser = async (silent: boolean = false) => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-            await fetchUserProfile(session.user);
+            await fetchUserProfile(session.user, silent);
         }
     };
 
