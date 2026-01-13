@@ -60,6 +60,7 @@ const StudentDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('overview');
     const [showNotifications, setShowNotifications] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const hasInitialLoadRef = React.useRef(false);
 
     // Redirect to registration if profile is missing
     useEffect(() => {
@@ -371,7 +372,13 @@ const StudentDashboard: React.FC = () => {
     }, [user]);
 
     useEffect(() => {
-        fetchDashboardData();
+        const loadData = async () => {
+            // If we've already loaded once, use silent mode to prevent flashing loading screen
+            const silent = hasInitialLoadRef.current;
+            await fetchDashboardData(silent);
+            hasInitialLoadRef.current = true;
+        };
+        loadData();
     }, [user]);
 
     if (authLoading || (loading && !campaign && !user?.student?.universityId)) {

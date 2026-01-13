@@ -66,12 +66,14 @@ const StudentRegister: React.FC = () => {
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
-        if (e.target.files && e.target.files[0]) {
-            if (e.target.files[0].size > 5 * 1024 * 1024) {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
                 setErrorMessage("File size exceeds 5MB limit.");
+                e.target.value = '';
                 return;
             }
-            updateFormData(field, e.target.files[0]);
+            updateFormData(field, file);
         }
     };
 
@@ -140,6 +142,8 @@ const StudentRegister: React.FC = () => {
                 });
 
             if (studentError) throw studentError;
+
+            // Sequential uploads for reliable mobile handling
 
             const uploadDoc = async (file: File, type: string) => {
                 const fileExt = file.name.split('.').pop();
