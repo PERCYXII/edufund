@@ -40,6 +40,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const isFetchingRef = React.useRef(false);
+    const hasLoadedUserRef = React.useRef(false);
 
     // Fetch user profile based on auth session
     const fetchUserProfile = async (sessionUser: any, silent: boolean = false) => {
@@ -144,6 +145,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             console.log('User profile fetched successfully:', userData);
             setUser(userData);
+            hasLoadedUserRef.current = true;
             return userData;
 
         } catch (error) {
@@ -180,8 +182,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
                 if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-                    setIsLoading(true);
-                    await fetchUserProfile(session.user);
+                    const silent = hasLoadedUserRef.current;
+                    if (!silent) setIsLoading(true);
+                    await fetchUserProfile(session.user, silent);
                 } else if (event === 'TOKEN_REFRESHED' && session?.user) {
                     // Token refresh should be silent to avoid unmounting app state
                     await fetchUserProfile(session.user, true);
@@ -189,6 +192,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     setUser(null);
                     setNotifications([]);
                     setIsLoading(false);
+                    hasLoadedUserRef.current = false;
                 }
             });
 
@@ -301,6 +305,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const logout = async () => {
         await supabase.auth.signOut();
         setUser(null);
+        hasLoadedUserRef.current = false;
     };
 
     const register = async (role: 'student' | 'donor', data: any): Promise<{ success: boolean; error?: string; data?: any }> => {
