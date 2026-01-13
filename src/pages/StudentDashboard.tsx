@@ -112,9 +112,9 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
-    const fetchDashboardData = async () => {
+    const fetchDashboardData = async (silent: boolean = false) => {
         if (!user) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
             // Fetch Campaign
             const { data: campaigns, error: campaignError } = await supabase
@@ -266,7 +266,7 @@ const StudentDashboard: React.FC = () => {
             toast.success('Profile image updated successfully!');
             await refreshUser(true); // Refresh user context to show new image
             await fetchVerificationStatus(); // Refresh status
-            await fetchDashboardData(); // Refresh campaign data
+            await fetchDashboardData(true); // Refresh campaign data
 
         } catch (error: any) {
             console.error('Error uploading image:', error);
@@ -1024,7 +1024,7 @@ const StudentDashboard: React.FC = () => {
                                         user={user}
                                         onSuccess={async () => {
                                             setActiveTab('campaign');
-                                            await fetchDashboardData();
+                                            await fetchDashboardData(true);
                                         }}
                                         onCancel={() => setActiveTab('overview')}
                                     /> : <div>Loading university info...</div>
@@ -1083,7 +1083,7 @@ const StudentDashboard: React.FC = () => {
                                 isEditing={true}
                                 onSuccess={async () => {
                                     setActiveTab('campaign');
-                                    await fetchDashboardData();
+                                    await fetchDashboardData(true);
                                 }}
                                 onCancel={() => setActiveTab('campaign')}
                             />
