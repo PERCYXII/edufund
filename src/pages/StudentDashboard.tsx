@@ -117,6 +117,7 @@ const StudentDashboard: React.FC = () => {
         if (!user) return;
         if (!silent) setLoading(true);
         try {
+            console.log("Fetching campaigns for student_id:", user.id);
             // Fetch Campaign
             const { data: campaigns, error: campaignError } = await supabase
                 .from('campaigns')
@@ -124,6 +125,11 @@ const StudentDashboard: React.FC = () => {
                 .eq('student_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(1);
+
+            if (campaignError) {
+                console.error("Campaign fetch error详情:", campaignError);
+                throw campaignError;
+            }
 
             if (campaignError) throw campaignError;
 
@@ -154,7 +160,7 @@ const StudentDashboard: React.FC = () => {
                     startDate: rawCampaign.start_date,
                     endDate: rawCampaign.end_date,
                     status: rawCampaign.status,
-                    type: rawCampaign.type,
+                    type: rawCampaign.type === 'quick_assist' ? 'quick' : 'standard',
                     category: rawCampaign.category,
                     isUrgent: rawCampaign.is_urgent,
                     fundingBreakdown: (fundingItems || []).map((item: any) => ({
@@ -1568,14 +1574,19 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             images = images.filter(Boolean);
 
             // 3. Upsert Campaign
+            const goalAmount = parseFloat(formData.goal);
+            if (isNaN(goalAmount)) {
+                throw new Error("Please enter a valid goal amount");
+            }
+
             const campaignPayload = {
                 student_id: user.id,
                 title: formData.title,
                 story: formData.story,
-                goal_amount: parseFloat(formData.goal),
+                goal_amount: goalAmount,
                 category: formData.category,
                 is_urgent: campaignType === 'quick',
-                type: campaignType,
+                type: campaignType === 'quick' ? 'quick_assist' : 'standard',
                 end_date: formData.endDate,
                 invoice_url: invoiceUrl,
                 fee_statement_url: feeStatementUrl,
@@ -1586,6 +1597,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                 status: isEditing ? (initialData?.status || 'pending') : 'pending',
                 updated_at: new Date().toISOString()
             };
+
+            console.log("Submitting campaign payload:", campaignPayload);
 
 
             let campaignId = initialData?.id;
