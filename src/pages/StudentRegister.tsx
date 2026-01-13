@@ -10,12 +10,13 @@ import './RegisterSplit.css';
 
 const StudentRegister: React.FC = () => {
     const navigate = useNavigate();
-    const { user, isLoading: authLoading } = useAuth();
+    const { user, isLoading: authLoading, refreshUser } = useAuth();
     const { success } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [universities, setUniversities] = useState<University[]>([]);
     const [loadingUniversities, setLoadingUniversities] = useState(true);
+    const [submittingMessage, setSubmittingMessage] = useState<string>('Processing...');
 
     const [formData, setFormData] = useState({
         firstName: '',
@@ -100,6 +101,7 @@ const StudentRegister: React.FC = () => {
         if (!user) return;
 
         setIsSubmitting(true);
+        setSubmittingMessage('Saving your profile...');
         setErrorMessage(null);
 
         try {
@@ -125,6 +127,9 @@ const StudentRegister: React.FC = () => {
                 profileImageUrl = urlData.publicUrl;
             }
 
+            setSubmittingMessage('Saving academic details...');
+
+            console.log("Upserting student profile for:", userId);
             const { error: studentError } = await supabase
                 .from('students')
                 .upsert({
@@ -141,8 +146,12 @@ const StudentRegister: React.FC = () => {
                     profile_image_url: profileImageUrl
                 });
 
-            if (studentError) throw studentError;
+            if (studentError) {
+                console.error("Student upsert error:", studentError);
+                throw studentError;
+            }
 
+            setSubmittingMessage('Uploading verification documents...');
             // Sequential uploads for reliable mobile handling
 
             const uploadDoc = async (file: File, type: string) => {
@@ -159,17 +168,30 @@ const StudentRegister: React.FC = () => {
                     .from('documents')
                     .getPublicUrl(data.path);
 
-                await supabase.from('verification_requests').insert({
+                console.log(`Inserting verification request for ${type}...`);
+                const { error: insertError } = await supabase.from('verification_requests').insert({
                     student_id: userId,
                     document_type: type,
                     document_url: urlData.publicUrl,
                     status: 'pending'
                 });
+
+                if (insertError) {
+                    console.error(`Verification insert error (${type}):`, insertError);
+                    throw insertError;
+                }
             };
 
             if (formData.idDocument) await uploadDoc(formData.idDocument, 'id_document');
             if (formData.enrollmentDocument) await uploadDoc(formData.enrollmentDocument, 'proof_of_enrollment');
-            if (formData.feeStatement) await uploadDoc(formData.feeStatement, 'fee_statement');
+            if (formData.feeStatement) {
+                setSubmittingMessage('Uploading fee statement...');
+                await uploadDoc(formData.feeStatement, 'fee_statement');
+            }
+
+            setSubmittingMessage('Finalizing profile...');
+            console.log("Registration steps completed. Refreshing user context...");
+            await refreshUser(true);
 
             success('Profile Completed!', 'Your details have been saved correctly.');
             navigate('/dashboard');
@@ -399,7 +421,7 @@ const StudentRegister: React.FC = () => {
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
-                                    <>Processing...</>
+                                    <>{submittingMessage}</>
                                 ) : (
                                     <>Complete Profile <ArrowRight size={20} /></>
                                 )}

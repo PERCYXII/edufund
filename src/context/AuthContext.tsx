@@ -163,7 +163,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             return null;
         } finally {
             isFetchingRef.current = false;
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
