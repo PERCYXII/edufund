@@ -1441,6 +1441,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     });
 
     const hasDonations = (initialData?.raised || 0) > 0;
+    const isFullyFunded = (initialData?.raised || 0) >= (initialData?.goal || 0) && (initialData?.goal || 0) > 0;
 
     const updateFormData = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -2260,7 +2261,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    disabled={campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) || submitting}
+                                    disabled={campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) || submitting || isFullyFunded}
                                     onClick={handleSubmit}
                                 >
                                     {submitting ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Launch Campaign')}
