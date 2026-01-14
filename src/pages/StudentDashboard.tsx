@@ -1655,11 +1655,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
         ],
     });
 
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const hasDonations = (initialData?.raised || 0) > 0;
     const isFullyFunded = (initialData?.raised || 0) >= (initialData?.goal || 0) && (initialData?.goal || 0) > 0;
 
     const updateFormData = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+        // Clear error when user types
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: '' }));
+        }
     };
 
     const updateBreakdownAmount = (id: string, amount: number) => {
@@ -1710,6 +1716,79 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             setImageFile(file);
             const url = URL.createObjectURL(file);
             setPreviewUrl(url);
+            if (errors.image) setErrors(prev => ({ ...prev, image: '' }));
+        }
+    };
+
+    const validateStep1 = () => {
+        const newErrors: Record<string, string> = {};
+
+        if (!formData.title.trim()) newErrors.title = "Campaign title is required";
+        if (!formData.goal || parseFloat(formData.goal) <= 0) newErrors.goal = "Valid funding goal is required";
+        if (!formData.endDate) newErrors.endDate = "End date is required";
+
+        // Image validation: Check previewUrl (covers both new uploads and existing images)
+        if (!previewUrl) newErrors.image = "Campaign image is required";
+
+        // Document validation: Check if file exists OR if we have initial URL
+        if (!formData.feeStatement && !initialData?.feeStatementUrl) newErrors.feeStatement = "Fee statement is required";
+        if (!formData.idDocument && !initialData?.idUrl) newErrors.idDocument = "ID document is required";
+        if (!formData.enrollmentDocument && !initialData?.enrollmentUrl) newErrors.enrollmentDocument = "Proof of enrollment is required";
+
+        if (formData.category === 'stationary' && !formData.invoice && !initialData?.invoiceUrl) {
+            newErrors.invoice = "Invoice is required for stationary requests";
+        }
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            const missing = Object.keys(newErrors).length;
+            toast.error(`Please fix ${missing} error${missing > 1 ? 's' : ''} to continue`);
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep2 = () => {
+        const newErrors: Record<string, string> = {};
+        if (!formData.story.trim() || formData.story.length < 50) {
+            newErrors.story = "Story must be at least 50 characters long";
+        }
+
+        setErrors(newErrors);
+        if (Object.keys(newErrors).length > 0) {
+            toast.error(newErrors.story);
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep3 = () => {
+        if (campaignType === 'standard') {
+            const total = formData.fundingBreakdown.reduce((sum, item) => sum + (item.amount || 0), 0);
+            const goal = parseInt(formData.goal) || 0;
+
+            if (total !== goal) {
+                toast.error(`Total breakdown (R${total.toLocaleString()}) must match Goal (R${goal.toLocaleString()})`);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleNextStep = () => {
+        if (step === 1 && validateStep1()) {
+            setStep(2);
+            window.scrollTo(0, 0);
+        } else if (step === 2 && validateStep2()) {
+            setStep(3);
+            window.scrollTo(0, 0);
+        }
+    };
+
+    const handleFinalSubmit = () => {
+        if (validateStep3()) {
+            handleSubmit();
         }
     };
 
@@ -2057,11 +2136,12 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     type="text"
                                     id="campaign-title"
                                     name="title"
-                                    className="form-input"
+                                    className={`form-input ${errors.title ? 'form-input-error' : ''}`}
                                     placeholder={campaignType === 'quick' ? "e.g., Urgent Food Assistance Needed" : "e.g., Help me complete my Computer Science degree"}
                                     value={formData.title}
                                     onChange={(e) => updateFormData('title', e.target.value)}
                                 />
+                                {errors.title && <p className="error-message"><AlertCircle size={12} /> {errors.title}</p>}
                             </div>
 
                             <div className="form-group">
@@ -2072,7 +2152,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         type="number"
                                         id="campaign-goal"
                                         name="goal"
-                                        className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''} ${errors.goal ? 'form-input-error' : ''}`}
                                         placeholder={campaignType === 'quick' ? "500" : "45000"}
                                         value={formData.goal}
                                         disabled={hasDonations}
@@ -2086,6 +2166,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         }}
                                     />
                                 </div>
+                                {errors.goal && <p className="error-message"><AlertCircle size={12} /> {errors.goal}</p>}
                                 {hasDonations && (
                                     <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                         <AlertCircle size={12} />
@@ -2096,7 +2177,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
 
                             <div className="form-group">
                                 <label className="form-label">Campaign Image *</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                <div className={`border-2 border-dashed rounded-lg p-6 text-center ${errors.image ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                                     <input
                                         type="file"
                                         accept="image/*"
@@ -2125,12 +2206,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         )}
                                     </label>
                                 </div>
+                                {errors.image && <p className="error-message text-center"><AlertCircle size={12} /> {errors.image}</p>}
                             </div>
 
                             {formData.category === 'stationary' && (
                                 <div className="form-group">
                                     <label className="form-label">Upload Invoice (Required for Stationary, Must be certified) *</label>
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center ${errors.invoice ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                                         <input
                                             type="file"
                                             accept=".pdf,.jpg,.png"
@@ -2162,6 +2244,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             </div>
                                         )}
                                     </div>
+                                    {errors.invoice && <p className="error-message text-center"><AlertCircle size={12} /> {errors.invoice}</p>}
                                 </div>
                             )}
 
@@ -2176,7 +2259,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     {/* Fee Statement */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">Fee Statement *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement || initialData?.feeStatementUrl ? 'border-green-300 bg-green-50' : errors.feeStatement ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 className="hidden"
@@ -2194,18 +2277,19 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="fee-statement-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.feeStatement ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.feeStatement ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.feeStatement ? formData.feeStatement.name : 'Upload Fee Statement'}
+                                                {(formData.feeStatement || initialData?.feeStatementUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.feeStatement || initialData?.feeStatementUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.feeStatement ? formData.feeStatement.name : initialData?.feeStatementUrl ? 'Document Uploaded' : 'Upload Fee Statement'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.feeStatement && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
 
                                     {/* ID Document */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">ID Document *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument || initialData?.idUrl ? 'border-green-300 bg-green-50' : errors.idDocument ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 className="hidden"
@@ -2223,18 +2307,19 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="id-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.idDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.idDocument ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.idDocument ? formData.idDocument.name : 'Upload ID'}
+                                                {(formData.idDocument || initialData?.idUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.idDocument || initialData?.idUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.idDocument ? formData.idDocument.name : initialData?.idUrl ? 'Document Uploaded' : 'Upload ID'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.idDocument && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
 
                                     {/* Proof of Enrollment */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">Proof of Enrollment *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument || initialData?.enrollmentUrl ? 'border-green-300 bg-green-50' : errors.enrollmentDocument ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 className="hidden"
@@ -2252,12 +2337,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="enrollment-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.enrollmentDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.enrollmentDocument ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.enrollmentDocument ? formData.enrollmentDocument.name : 'Upload Enrollment'}
+                                                {(formData.enrollmentDocument || initialData?.enrollmentUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.enrollmentDocument || initialData?.enrollmentUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.enrollmentDocument ? formData.enrollmentDocument.name : initialData?.enrollmentUrl ? 'Document Uploaded' : 'Upload Enrollment'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.enrollmentDocument && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
                                 </div>
                             </div>
@@ -2297,17 +2383,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    onClick={() => setStep(2)}
-                                    disabled={
-                                        !formData.title ||
-                                        !formData.goal ||
-                                        !formData.endDate ||
-                                        !imageFile ||
-                                        !formData.feeStatement ||
-                                        !formData.idDocument ||
-                                        !formData.enrollmentDocument ||
-                                        (formData.category === 'stationary' && !formData.invoice)
-                                    }
+                                    onClick={handleNextStep}
                                 >
                                     Continue to Your Story
                                 </button>
@@ -2328,12 +2404,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <textarea
                                     id="campaign-story"
                                     name="story"
-                                    className="form-input form-textarea"
+                                    className={`form-input form-textarea ${errors.story ? 'form-input-error' : ''}`}
                                     rows={8}
                                     placeholder="Tell donors about yourself, your background, your goals, and why you need their support..."
                                     value={formData.story}
                                     onChange={(e) => updateFormData('story', e.target.value)}
                                 />
+                                {errors.story && <p className="error-message"><AlertCircle size={12} /> {errors.story}</p>}
                                 <p className="form-hint">{formData.story.length}/1000 characters (minimum 200 recommended)</p>
                             </div>
 
@@ -2359,8 +2436,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    onClick={() => setStep(3)}
-                                    disabled={formData.story.length < 50}
+                                    onClick={handleNextStep}
                                 >
                                     Continue to Funding
                                 </button>
@@ -2476,8 +2552,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    disabled={campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) || submitting || isFullyFunded}
-                                    onClick={handleSubmit}
+                                    disabled={submitting || isFullyFunded}
+                                    onClick={handleFinalSubmit}
                                 >
                                     {submitting ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Launch Campaign')}
                                 </button>
