@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, AlertCircle, ArrowRight, Phone, BookOpen, Calendar, GraduationCap, Building } from 'lucide-react';
+import { User, AlertCircle, ArrowRight, Phone, BookOpen, Calendar, GraduationCap, Building, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -85,14 +85,17 @@ const StudentRegister: React.FC = () => {
     const validateForm = (): boolean => {
         if (!formData.firstName || !formData.lastName || !formData.universityId || !formData.studentNumber) {
             setErrorMessage("Please fill in all required fields");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return false;
         }
         if (!formData.profileImage) {
             setErrorMessage("Please upload a profile image");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return false;
         }
         if (!formData.idDocument || !formData.enrollmentDocument) {
             setErrorMessage("Please upload ID and Proof of Enrollment");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return false;
         }
         return true;
@@ -100,6 +103,9 @@ const StudentRegister: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Dismiss keyboard on mobile
+        (document.activeElement as HTMLElement)?.blur();
 
         if (!validateForm()) return;
         if (!user) return;
@@ -203,6 +209,7 @@ const StudentRegister: React.FC = () => {
         } catch (error: any) {
             console.error("Registration error:", error.message || error);
             setErrorMessage(error.message || "Registration failed. Please try again.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         } finally {
             setIsSubmitting(false);
         }
@@ -425,7 +432,7 @@ const StudentRegister: React.FC = () => {
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
-                                    <>{submittingMessage}</>
+                                    <><Loader2 className="animate-spin" size={20} /> {submittingMessage}</>
                                 ) : (
                                     <>Complete Profile <ArrowRight size={20} /></>
                                 )}
