@@ -255,7 +255,7 @@ const StudentRegister: React.FC = () => {
                             </div>
                         )}
 
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} noValidate>
                             <h3 className="form-section-title">
                                 <User size={20} /> Personal Information
                             </h3>
