@@ -1,6 +1,29 @@
-// ============================================
-// UniFund Type Definitions
-// ============================================
+export interface Campaign {
+  id: string;
+  studentId: string;
+  title: string;
+  story: string;
+  goal: number;
+  raised: number;
+  donors: number;
+  daysLeft: number;
+  startDate: string;
+  endDate: string;
+  status: 'draft' | 'pending' | 'active' | 'completed' | 'expired' | 'rejected';
+  paused: boolean;
+  type: 'standard' | 'quick';
+  category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
+  isUrgent: boolean;
+  fundingBreakdown: FundingItem[];
+  images?: string[];
+  invoiceUrl?: string;
+  feeStatementUrl?: string;
+  idUrl?: string;
+  enrollmentUrl?: string;
+  videoUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface University {
   id: string;
@@ -46,32 +69,6 @@ export interface Student {
   fieldOfStudy?: string;
   title?: string;
   profileImage?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Campaign {
-  id: string;
-  studentId: string;
-  title: string;
-  story: string;
-  goal: number;
-  raised: number;
-  donors: number;
-  daysLeft: number;
-  startDate: string;
-  endDate: string;
-  status: 'draft' | 'pending' | 'active' | 'completed' | 'expired' | 'rejected';
-  type: 'standard' | 'quick';
-  category: 'tuition' | 'accommodation' | 'food' | 'textbooks' | 'transport' | 'application_fee' | 'registration_fee' | 'stationary' | 'other';
-  isUrgent: boolean;
-  fundingBreakdown: FundingItem[];
-  images?: string[];
-  invoiceUrl?: string;
-  feeStatementUrl?: string;
-  idUrl?: string;
-  enrollmentUrl?: string;
-  videoUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

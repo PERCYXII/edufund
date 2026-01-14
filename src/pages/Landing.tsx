@@ -138,6 +138,7 @@ const Landing: React.FC = () => {
                         startDate: c.start_date,
                         endDate: c.end_date, // Keep endDate for consistency with type
                         status: c.status,
+                        paused: c.is_paused,
                         type: c.type || (c.is_urgent ? 'quick_assist' : 'standard'),
                         category: c.category,
                         isUrgent: c.is_urgent,
