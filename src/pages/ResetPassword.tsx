@@ -86,7 +86,7 @@ const ResetPassword: React.FC = () => {
                         <p className="login-subtitle">Please enter your new password below</p>
                     </div>
 
-                    <form className="login-form" onSubmit={handleReset}>
+                    <form className="login-form" onSubmit={handleReset} noValidate>
                         {error && (
                             <div className="login-error">
                                 {error}

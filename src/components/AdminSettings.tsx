@@ -165,7 +165,7 @@ const AdminSettings: React.FC = () => {
                     Security & Access
                 </div>
                 <div style={{ padding: 'var(--spacing-6)' }}>
-                    <form onSubmit={handlePasswordChange} className="max-w-md">
+                    <form onSubmit={handlePasswordChange} className="max-w-md" noValidate>
                         <div className="form-group">
                             <label className="form-label">New Password</label>
                             <input

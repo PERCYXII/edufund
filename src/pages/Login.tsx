@@ -56,7 +56,7 @@ const Login: React.FC = () => {
                         <p className="login-subtitle">Login to your UniFund account</p>
                     </div>
 
-                    <form className="login-form" onSubmit={handleLogin}>
+                    <form className="login-form" onSubmit={handleLogin} noValidate>
                         {error && (
                             <div className="login-error">
                                 {error}

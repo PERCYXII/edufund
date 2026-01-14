@@ -142,7 +142,7 @@ const PlatformDonationButton: React.FC<PlatformDonationButtonProps> = ({ classNa
                             Your contribution helps us keep the platform running and free for students.
                         </p>
 
-                        <form onSubmit={handlePaystack}>
+                        <form onSubmit={handlePaystack} noValidate>
                             <div className="donation-form-group">
                                 <label className="donation-label">Amount (ZAR)</label>
                                 <div className="donation-input-wrapper">

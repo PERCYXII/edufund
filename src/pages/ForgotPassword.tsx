@@ -75,7 +75,7 @@ const ForgotPassword: React.FC = () => {
                         <p className="login-subtitle">Enter your email and we'll send you a link to reset your password</p>
                     </div>
 
-                    <form className="login-form" onSubmit={handleSubmit}>
+                    <form className="login-form" onSubmit={handleSubmit} noValidate>
                         {error && (
                             <div className="login-error">
                                 {error}

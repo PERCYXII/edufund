@@ -242,7 +242,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
                 {step === 2 && (
                     <div className="modal-step">
                         <h3>Confirm Donation</h3>
-                        <form onSubmit={handleStudentDonationSubmit}>
+                        <form onSubmit={handleStudentDonationSubmit} noValidate>
                             <div className="form-group">
                                 <label className="form-label">Upload Proof of Payment *</label>
                                 <input

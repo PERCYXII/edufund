@@ -337,7 +337,7 @@ const Settings: React.FC = () => {
                                             <h2 className="card-title">General Information</h2>
                                         </div>
                                         <div className="card-body">
-                                            <form onSubmit={handleSaveProfile} className="space-y-6">
+                                            <form onSubmit={handleSaveProfile} className="space-y-6" noValidate>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                     <div className="form-group">
                                                         <label className="form-label text-sm font-bold uppercase tracking-wide text-gray-500">First Name</label>
@@ -417,7 +417,7 @@ const Settings: React.FC = () => {
                                             <h2 className="card-title">Change Password</h2>
                                         </div>
                                         <div className="card-body">
-                                            <form onSubmit={handleUpdatePassword} className="space-y-6">
+                                            <form onSubmit={handleUpdatePassword} className="space-y-6" noValidate>
                                                 <div className="form-group">
                                                     <label className="form-label text-sm font-bold uppercase tracking-wide text-gray-500">New Password</label>
                                                     <div className="relative">

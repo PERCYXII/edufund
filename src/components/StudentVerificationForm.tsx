@@ -85,7 +85,7 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
     };
 
     return (
-        <form onSubmit={handleVerificationSubmit} className="space-y-8">
+        <form onSubmit={handleVerificationSubmit} className="space-y-8" noValidate>
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
                 <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-lg">
                     <AlertCircle size={20} />

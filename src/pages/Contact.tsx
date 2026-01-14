@@ -81,7 +81,7 @@ const Contact: React.FC = () => {
                         </div>
 
                         <div className="contact-form-panel">
-                            <form onSubmit={handleSubmit}>
+                            <form onSubmit={handleSubmit} noValidate>
                                 <div className="form-group">
                                     <label className="form-label">Full Name</label>
                                     <input

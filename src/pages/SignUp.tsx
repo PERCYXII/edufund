@@ -70,7 +70,7 @@ const SignUp: React.FC = () => {
                         <p className="login-subtitle">Join UniFund to start your journey</p>
                     </div>
 
-                    <form className="login-form" onSubmit={handleSignUp}>
+                    <form className="login-form" onSubmit={handleSignUp} noValidate>
                         {error && (
                             <div className="login-error">
                                 {error}
