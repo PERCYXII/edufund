@@ -133,8 +133,8 @@ const Settings: React.FC = () => {
         if (!file || !user) return;
 
         // Validate size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            setMessage({ text: 'Image size too large. Max 5MB allowed.', type: 'error' });
+        if (file.size > 20 * 1024 * 1024) {
+            setMessage({ text: 'Image size too large. Max 20MB allowed.', type: 'error' });
             return;
         }
 
@@ -299,7 +299,7 @@ const Settings: React.FC = () => {
                                                 </div>
                                                 <div className="flex-1 text-center md:text-left">
                                                     <h3 className="text-lg font-bold">Update Profile Photo</h3>
-                                                    <p className="text-gray-500 mb-4 max-w-sm">Recommended: Square JPEG or PNG, at least 400x400 pixels. Max size 5MB.</p>
+                                                    <p className="text-gray-500 mb-4 max-w-sm">Recommended: Square JPEG or PNG, at least 400x400 pixels. Max size 20MB.</p>
                                                     <div className="flex flex-wrap justify-center md:justify-start gap-3">
                                                         <button
                                                             className="btn btn-primary btn-sm"

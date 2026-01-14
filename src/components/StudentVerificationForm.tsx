@@ -104,13 +104,13 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                         <input
                             type="file"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            accept=".pdf,.png,.jpg,.jpeg"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/jpeg,image/png"
                             required
                             onChange={e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                    if (file.size > 5 * 1024 * 1024) {
-                                        toast.error("File size exceeds 5MB limit.");
+                                    if (file.size > 20 * 1024 * 1024) {
+                                        toast.error("File size exceeds 20MB limit.");
                                         e.target.value = '';
                                         return;
                                     }
@@ -134,13 +134,13 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                         <input
                             type="file"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            accept=".pdf,.png,.jpg,.jpeg"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/jpeg,image/png"
                             required
                             onChange={e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                    if (file.size > 5 * 1024 * 1024) {
-                                        toast.error("File size exceeds 5MB limit.");
+                                    if (file.size > 20 * 1024 * 1024) {
+                                        toast.error("File size exceeds 20MB limit.");
                                         e.target.value = '';
                                         return;
                                     }
@@ -164,12 +164,12 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                         <input
                             type="file"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            accept=".pdf,.png,.jpg,.jpeg"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/jpeg,image/png"
                             onChange={e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                    if (file.size > 5 * 1024 * 1024) {
-                                        toast.error("File size exceeds 5MB limit.");
+                                    if (file.size > 20 * 1024 * 1024) {
+                                        toast.error("File size exceeds 20MB limit.");
                                         e.target.value = '';
                                         return;
                                     }

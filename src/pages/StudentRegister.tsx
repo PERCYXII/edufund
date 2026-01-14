@@ -11,7 +11,7 @@ import './RegisterSplit.css';
 const StudentRegister: React.FC = () => {
     const navigate = useNavigate();
     const { user, isLoading: authLoading, refreshUser } = useAuth();
-    const { success } = useToast();
+    const { success, error: errorToast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [universities, setUniversities] = useState<University[]>([]);
@@ -69,8 +69,12 @@ const StudentRegister: React.FC = () => {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                setErrorMessage("File size exceeds 5MB limit.");
+            // Increased limit to 20MB for high-res mobile photos
+            if (file.size > 20 * 1024 * 1024) {
+                const msg = "File size exceeds 20MB limit. Please compress or choose a smaller file.";
+                setErrorMessage(msg);
+                // Also show a toast so mobile users see it immediately
+                errorToast("File too large (Max 20MB)"); 
                 e.target.value = '';
                 return;
             }
@@ -305,39 +309,39 @@ const StudentRegister: React.FC = () => {
                                         onChange={(e) => handleFileChange(e, 'profileImage')}
                                         required
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">Upload a clear photo of yourself (Max 5MB).</p>
+                                    <p className="text-xs text-gray-500 mt-1">Upload a clear photo of yourself (Max 20MB).</p>
                                 </div>
                                 <div className="form-group">
                                     <label className="split-form-label">Certified ID Document / Passport *</label>
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                         onChange={(e) => handleFileChange(e, 'idDocument')}
                                         required
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">PDF, JPG or PNG (Max 5MB).</p>
+                                    <p className="text-xs text-gray-500 mt-1">PDF, JPG or PNG (Max 20MB).</p>
                                 </div>
                                 <div className="form-group">
                                     <label className="split-form-label">Proof of Enrollment *</label>
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                         onChange={(e) => handleFileChange(e, 'enrollmentDocument')}
                                         required
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">Official letter from your university.</p>
+                                    <p className="text-xs text-gray-500 mt-1">Official letter from your university (Max 20MB).</p>
                                 </div>
                                 <div className="form-group">
                                     <label className="split-form-label">Fee Statement (Optional)</label>
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                         onChange={(e) => handleFileChange(e, 'feeStatement')}
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">Latest financial statement.</p>
+                                    <p className="text-xs text-gray-500 mt-1">Latest financial statement (Max 20MB).</p>
                                 </div>
                             </div>
 

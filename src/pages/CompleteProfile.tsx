@@ -15,12 +15,14 @@ import {
 import { supabase } from '../lib/supabase';
 import { YEAR_OPTIONS, ACCEPTED_DOCUMENTS } from '../data/constants';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import type { University } from '../types';
 import './Register.css';
 
 const CompleteProfile: React.FC = () => {
     const navigate = useNavigate();
     const { user, isLoading: authLoading, logout } = useAuth();
+    const { error: errorToast } = useToast();
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [universities, setUniversities] = useState<University[]>([]);
@@ -108,6 +110,13 @@ const CompleteProfile: React.FC = () => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
         const file = e.target.files?.[0] || null;
+        if (file) {
+            if (file.size > 20 * 1024 * 1024) {
+                errorToast("File size exceeds 20MB limit.");
+                e.target.value = '';
+                return;
+            }
+        }
         updateFormData(field, file);
     };
 
@@ -490,7 +499,7 @@ const CompleteProfile: React.FC = () => {
                                         <input
                                             type="file"
                                             className="upload-input"
-                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                             onChange={(e) => handleFileChange(e, 'idDocument')}
                                         />
                                         <UploadIcon size={32} className="upload-icon" />
@@ -508,7 +517,7 @@ const CompleteProfile: React.FC = () => {
                                         <input
                                             type="file"
                                             className="upload-input"
-                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                             onChange={(e) => handleFileChange(e, 'enrollmentDocument')}
                                         />
                                         <UploadIcon size={32} className="upload-icon" />
@@ -526,7 +535,7 @@ const CompleteProfile: React.FC = () => {
                                         <input
                                             type="file"
                                             className="upload-input"
-                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                             onChange={(e) => handleFileChange(e, 'academicRecord')}
                                         />
                                         <UploadIcon size={32} className="upload-icon" />
@@ -544,7 +553,7 @@ const CompleteProfile: React.FC = () => {
                                         <input
                                             type="file"
                                             className="upload-input"
-                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                             onChange={(e) => handleFileChange(e, 'feeStatement')}
                                         />
                                         <UploadIcon size={32} className="upload-icon" />

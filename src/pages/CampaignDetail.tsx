@@ -248,8 +248,17 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
                                 <input
                                     type="file"
                                     className="form-input"
-                                    accept=".pdf,.jpg,.png"
-                                    onChange={e => setProofFile(e.target.files?.[0] || null)}
+                                    accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                    onChange={e => {
+                                        const file = e.target.files?.[0] || null;
+                                        if (file && file.size > 20 * 1024 * 1024) {
+                                            toastError("File too large", "Proof of payment must be under 20MB");
+                                            e.target.value = '';
+                                            setProofFile(null);
+                                            return;
+                                        }
+                                        setProofFile(file);
+                                    }}
                                     required
                                 />
                             </div>

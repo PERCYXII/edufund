@@ -244,6 +244,13 @@ const StudentDashboard: React.FC = () => {
     const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
         const file = e.target.files[0];
+        
+        if (file.size > 20 * 1024 * 1024) {
+            toast.error('File too large (Max 20MB)');
+            e.target.value = '';
+            return;
+        }
+
         setImageUploading(true);
 
         try {
@@ -1149,7 +1156,7 @@ const StudentDashboard: React.FC = () => {
                                                             />
                                                         </label>
                                                         <p className="text-xs text-gray-500">
-                                                            Recommended: Square JPG, PNG. Max 2MB.
+                                                            Recommended: Square JPG, PNG. Max 20MB.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1487,8 +1494,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("Image size exceeds 5MB limit.");
+            if (file.size > 20 * 1024 * 1024) {
+                toast.error("Image size exceeds 20MB limit.");
                 e.target.value = '';
                 return;
             }
@@ -1905,7 +1912,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             <div className="flex flex-col items-center gap-2">
                                                 <Upload size={32} className="text-gray-400" />
                                                 <span className="text-primary-600 font-medium">Click to upload campaign image</span>
-                                                <span className="text-xs text-gray-500">JPG, PNG or WEBP (Max 5MB)</span>
+                                                <span className="text-xs text-gray-500">JPG, PNG or WEBP (Max 20MB)</span>
                                             </div>
                                         )}
                                     </label>
@@ -1924,8 +1931,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             onChange={(e) => {
                                                 const file = e.target.files?.[0];
                                                 if (file) {
-                                                    if (file.size > 5 * 1024 * 1024) {
-                                                        toast.error("File exceeds 5MB limit.");
+                                                    if (file.size > 20 * 1024 * 1024) {
+                                                        toast.error("File exceeds 20MB limit.");
                                                         e.target.value = '';
                                                         return;
                                                     }
@@ -1937,7 +1944,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             <div className="flex flex-col items-center gap-2">
                                                 <Share2 className="rotate-90" size={24} />
                                                 <span className="text-primary-600 font-medium">Click to upload invoice</span>
-                                                <span className="text-xs text-gray-500">PDF, JPG or PNG (Max 5MB)</span>
+                                                <span className="text-xs text-gray-500">PDF, JPG or PNG (Max 20MB)</span>
                                             </div>
                                         </label>
                                         {formData.invoice && (
@@ -1964,13 +1971,14 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                                 className="hidden"
                                                 id="fee-statement-upload"
                                                 onChange={(e) => {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
-                                                        if (file.size > 5 * 1024 * 1024) {
-                                                            toast.error("File exceeds 5MB limit.");
+                                                        if (file.size > 20 * 1024 * 1024) {
+                                                            toast.error("File exceeds 20MB limit.");
                                                             e.target.value = '';
                                                             return;
                                                         }
@@ -1993,13 +2001,14 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                                 className="hidden"
                                                 id="id-upload"
                                                 onChange={(e) => {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
-                                                        if (file.size > 5 * 1024 * 1024) {
-                                                            toast.error("File exceeds 5MB limit.");
+                                                        if (file.size > 20 * 1024 * 1024) {
+                                                            toast.error("File exceeds 20MB limit.");
                                                             e.target.value = '';
                                                             return;
                                                         }
@@ -2022,13 +2031,14 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                                 className="hidden"
                                                 id="enrollment-upload"
                                                 onChange={(e) => {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
-                                                        if (file.size > 5 * 1024 * 1024) {
-                                                            toast.error("File exceeds 5MB limit.");
+                                                        if (file.size > 20 * 1024 * 1024) {
+                                                            toast.error("File exceeds 20MB limit.");
                                                             e.target.value = '';
                                                             return;
                                                         }
