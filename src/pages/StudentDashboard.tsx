@@ -88,6 +88,12 @@ const StudentDashboard: React.FC = () => {
     const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
 
+    // Milestone & Pause State
+    const [pendingMilestone, setPendingMilestone] = useState<any>(null);
+    const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+    const [milestoneFile, setMilestoneFile] = useState<File | null>(null);
+    const [milestoneSubmitting, setMilestoneSubmitting] = useState(false);
+
     // Verification state
     // Verification state - Refactored to component
 
@@ -176,10 +182,36 @@ const StudentDashboard: React.FC = () => {
                     enrollmentUrl: rawCampaign.enrollment_url,
                     videoUrl: rawCampaign.video_url,
                     createdAt: rawCampaign.created_at,
-                    updatedAt: rawCampaign.updated_at
+                    updatedAt: rawCampaign.updated_at,
+                    paused: rawCampaign.is_paused // Map db column to frontend type
                 };
 
                 setCampaign(mappedCampaign as unknown as CampaignWithStudent);
+
+                // Check for Pending Milestones if Paused
+                if (rawCampaign.is_paused) {
+                    const { data: milestoneData } = await supabase
+                        .from('campaign_milestones')
+                        .select('*')
+                        .eq('campaign_id', rawCampaign.id)
+                        .eq('status', 'pending_upload')
+                        .maybeSingle();
+
+                    if (milestoneData) {
+                        setPendingMilestone(milestoneData);
+                    } else {
+                        // Check for pending review or rejected
+                        const { data: otherData } = await supabase
+                            .from('campaign_milestones')
+                            .select('*')
+                            .eq('campaign_id', rawCampaign.id)
+                            .in('status', ['pending_review', 'rejected'])
+                            .maybeSingle();
+                        if (otherData) {
+                            setPendingMilestone(otherData);
+                        }
+                    }
+                }
 
                 // Fetch Recent Donations
                 const { data: donations, error: donationError } = await supabase
@@ -335,6 +367,68 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
+
+    const handleMilestoneUpload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingMilestone || !milestoneFile || !campaign) return;
+
+        setMilestoneSubmitting(true);
+        try {
+            // 1. Upload Document
+            const fileExt = milestoneFile.name.split('.').pop();
+            const fileName = `milestones/${campaign.id}/${pendingMilestone.milestone_percentage}_${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(fileName, milestoneFile);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('documents')
+                .getPublicUrl(fileName);
+
+            // 2. Update Milestone Record
+            const { error: updateError } = await supabase
+                .from('campaign_milestones')
+                .update({
+                    status: 'pending_review',
+                    proof_url: publicUrl,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingMilestone.id);
+
+            if (updateError) throw updateError;
+
+            // 3. Notify Admin
+            // (Ideally this is done via database trigger, but we can do it here for now)
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            if (admins && admins.length > 0) {
+                await supabase.from('notifications').insert(
+                    admins.map(admin => ({
+                        user_id: admin.id,
+                        title: 'Milestone Verification Required',
+                        message: `Student ${user?.student?.firstName} has uploaded proof for their ${pendingMilestone.milestone_percentage}% milestone.`,
+                        type: 'verification_update'
+                    }))
+                );
+            }
+
+            toast.success("Document uploaded successfully! An admin will review it shortly.");
+            setShowMilestoneModal(false);
+            setPendingMilestone((prev: any) => ({ ...prev, status: 'pending_review' }));
+
+        } catch (err: any) {
+            console.error("Error uploading milestone:", err);
+            toast.error("Upload failed: " + err.message);
+        } finally {
+            setMilestoneSubmitting(false);
+        }
+    };
 
     const handleShowDonors = async () => {
         if (!campaign) return;
@@ -652,6 +746,57 @@ const StudentDashboard: React.FC = () => {
 
 
                                     {/* Status alerts... */}
+                                    {campaign.paused && (
+                                        <div className="alert alert-warning border-l-4 border-orange-500 bg-orange-50 mb-6 p-4 rounded-r flex items-start gap-4">
+                                            <div className="p-2 bg-orange-100 rounded-full text-orange-600 shrink-0">
+                                                <AlertCircle size={24} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-orange-800 text-lg">Campaign Paused: Funding Milestone Reached! 🎉</h4>
+                                                <p className="text-orange-700 mt-1">
+                                                    Congratulations! You've reached {pendingMilestone?.milestone_percentage || 'a'}% of your goal.
+                                                    To ensure transparency and protect donors, your campaign is temporarily paused.
+                                                </p>
+                                                {pendingMilestone?.status === 'pending_upload' && (
+                                                    <div className="mt-4">
+                                                        <p className="text-sm font-semibold text-orange-800 mb-2">
+                                                            Please upload an updated fee statement showing your current balance to continue receiving donations.
+                                                        </p>
+                                                        <button
+                                                            className="btn btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2"
+                                                            onClick={() => setShowMilestoneModal(true)}
+                                                        >
+                                                            <Upload size={18} /> Upload Fee Statement
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {pendingMilestone?.status === 'pending_review' && (
+                                                    <div className="mt-3 flex items-center gap-2 text-orange-800 bg-orange-100/50 p-2 rounded-md">
+                                                        <Clock size={16} />
+                                                        <span className="font-medium">Document uploaded. Waiting for admin approval...</span>
+                                                    </div>
+                                                )}
+                                                {pendingMilestone?.status === 'rejected' && (
+                                                    <div className="mt-4">
+                                                        <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded-md mb-3">
+                                                            <div className="flex items-center gap-2 mb-1 font-bold">
+                                                                <XCircle size={16} />
+                                                                Verification Rejected
+                                                            </div>
+                                                            <p className="text-sm">{pendingMilestone.rejection_reason}</p>
+                                                        </div>
+                                                        <button
+                                                            className="btn btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2"
+                                                            onClick={() => setShowMilestoneModal(true)}
+                                                        >
+                                                            <Upload size={18} /> Re-upload Fee Statement
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {campaign.status === 'pending' && (
                                         <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
                                             <Clock size={24} />
@@ -1325,6 +1470,76 @@ const StudentDashboard: React.FC = () => {
                                 {isExtending ? 'Extending...' : 'Confirm Extension'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Milestone Upload Modal */}
+            {showMilestoneModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h3 className="modal-title">Verify Funding Milestone</h3>
+                            <button onClick={() => setShowMilestoneModal(false)} className="modal-close-btn">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleMilestoneUpload}>
+                            <div className="modal-body">
+                                <div className="bg-blue-50 p-4 rounded-lg mb-4 text-sm text-blue-800">
+                                    <p>
+                                        You have reached the <strong>{pendingMilestone?.milestone_percentage}% funding milestone</strong>.
+                                        Please upload an updated fee statement to confirm your outstanding balance and continued need.
+                                    </p>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Updated Fee Statement *</label>
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            id="milestone-upload"
+                                            accept=".pdf,.jpg,.png"
+                                            required
+                                            onChange={(e) => setMilestoneFile(e.target.files?.[0] || null)}
+                                        />
+                                        <label htmlFor="milestone-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                            {milestoneFile ? (
+                                                <>
+                                                    <CheckCircle size={32} className="text-green-500" />
+                                                    <span className="font-medium text-gray-900">{milestoneFile.name}</span>
+                                                    <span className="text-xs text-gray-500">Click to change</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Upload size={32} className="text-gray-400" />
+                                                    <span className="font-medium text-primary-600">Click to upload document</span>
+                                                    <span className="text-xs text-gray-500">PDF, JPG or PNG (Max 5MB)</span>
+                                                </>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowMilestoneModal(false)}
+                                    disabled={milestoneSubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={!milestoneFile || milestoneSubmitting}
+                                >
+                                    {milestoneSubmitting ? 'Uploading...' : 'Submit Verification'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

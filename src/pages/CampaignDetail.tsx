@@ -572,6 +572,7 @@ const CampaignDetail: React.FC = () => {
                     invoiceUrl: c.invoice_url,
                     createdAt: c.created_at,
                     updatedAt: c.updated_at,
+                    paused: c.is_paused,
                     student: {
                         id: c.student.id,
                         email: c.student.email,
@@ -640,6 +641,11 @@ const CampaignDetail: React.FC = () => {
     };
 
     const handleDonateClick = () => {
+        if (campaign?.paused) {
+            warning("Campaign Paused", "This campaign is currently paused for verification. Please try again later.");
+            return;
+        }
+
         const amt = parseFloat(customAmount || donationAmount);
         if (!amt || amt <= 0) {
             warning("Invalid Amount", "Please enter a valid donation amount.");
@@ -1010,6 +1016,19 @@ const CampaignDetail: React.FC = () => {
                     {/* Sidebar - Donation */}
                     <div className="campaign-sidebar">
                         <div className="donation-card">
+                            {campaign.paused && (
+                                <div className="bg-orange-50 border border-orange-200 text-orange-800 p-4 rounded-lg mb-4 text-center">
+                                    <div className="flex justify-center mb-2 text-orange-600">
+                                        <Shield size={24} />
+                                    </div>
+                                    <h4 className="font-bold mb-1">Campaign Temporarily Paused</h4>
+                                    <p className="text-sm">
+                                        This campaign has reached a significant funding milestone and is currently undergoing routine verification.
+                                        Donations will resume shortly.
+                                    </p>
+                                </div>
+                            )}
+
                             <h3 className="donation-title">Support {campaign.student.firstName}</h3>
 
                             <div className="preset-amounts">
@@ -1019,6 +1038,7 @@ const CampaignDetail: React.FC = () => {
                                         type="button"
                                         onClick={() => handlePresetAmount(amount)}
                                         className={`preset-btn ${donationAmount === amount.toString() && !customAmount ? 'active' : ''}`}
+                                        disabled={campaign.paused}
                                     >
                                         R{amount.toLocaleString()}
                                     </button>
@@ -1035,6 +1055,7 @@ const CampaignDetail: React.FC = () => {
                                         value={customAmount}
                                         onChange={(e) => handleCustomAmount(e.target.value)}
                                         className="form-input amount-input"
+                                        disabled={campaign.paused}
                                     />
                                 </div>
                             </div>
@@ -1042,9 +1063,9 @@ const CampaignDetail: React.FC = () => {
                             <button
                                 className="btn btn-primary btn-lg donate-btn"
                                 onClick={handleDonateClick}
-                                disabled={(!donationAmount && !customAmount)}
+                                disabled={(!donationAmount && !customAmount) || campaign.paused}
                             >
-                                Donate Now
+                                {campaign.paused ? 'Donations Paused' : 'Donate Now'}
                             </button>
 
                             <p className="donation-note">
