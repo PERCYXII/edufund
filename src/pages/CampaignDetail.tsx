@@ -99,7 +99,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ amount, campaign, onClose, 
                     amount: amount,
                     is_anonymous: isAnonymous,
                     proof_of_payment_url: uploadData.path,
-                    status: 'pending',
+                    status:  'pending',
                     guest_name: isAnonymous ? 'Anonymous' : `${firstName} ${lastName}`.trim(),
                     guest_email: isAnonymous ? null : email
                 });
