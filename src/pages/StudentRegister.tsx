@@ -4,6 +4,7 @@ import { User, AlertCircle, ArrowRight, Phone, BookOpen, Calendar, GraduationCap
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { supabase } from '../lib/supabase';
+import { compressImage, withRetryAndTimeout, withTimeout } from '../lib/uploadHelpers';
 import type { University } from '../types';
 import './Register.css';
 import './RegisterSplit.css';
@@ -123,13 +124,7 @@ const StudentRegister: React.FC = () => {
         setSubmittingMessage('Checking connection...');
         setErrorMessage(null);
 
-        // Helper for timeouts
-        const withTimeout = async <T,>(promise: PromiseLike<T> | Promise<T>, ms: number = 20000): Promise<T> => {
-            return Promise.race([
-                Promise.resolve(promise),
-                new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Operation timed out. Please check your internet connection.')), ms))
-            ]);
-        };
+        // Using imported utilities for retry and compression
 
         try {
             const userId = user.id;
@@ -143,7 +138,8 @@ const StudentRegister: React.FC = () => {
             try {
                 const { data: existingProfile } = await withTimeout(
                     supabase.from('profiles').select('id').eq('id', userId).maybeSingle(), 
-                    5000
+                    15000,
+                    'Profile check'
                 );
                 if (existingProfile) profileExists = true;
             } catch (e) {
@@ -157,7 +153,9 @@ const StudentRegister: React.FC = () => {
                 const { error: profileError } = await withTimeout(
                     supabase
                         .from('profiles')
-                        .upsert({ id: userId, email: user.email, role: 'student' }, { onConflict: 'id' })
+                        .upsert({ id: userId, email: user.email, role: 'student' }, { onConflict: 'id' }),
+                    30000,
+                    'Profile creation'
                 );
                 
                 if (profileError) {
@@ -168,17 +166,26 @@ const StudentRegister: React.FC = () => {
                  console.log("Profile already exists, skipping upsert.");
             }
 
-            // 2. PROFILE IMAGE
+            // 2. PROFILE IMAGE - With compression and retry
             let profileImageUrl = null;
             if (formData.profileImage) {
+                setSubmittingMessage('Compressing profile photo...');
+                const compressedImage = await compressImage(formData.profileImage, 1200, 0.7);
+                
                 setSubmittingMessage('Uploading profile photo...');
-                const fileExt = formData.profileImage.name.split('.').pop();
+                const fileExt = 'jpg'; // Always use jpg after compression
                 const fileName = `${userId}/profile_${Date.now()}.${fileExt}`;
                 
-                const { error: uploadError } = await withTimeout(
-                    supabase.storage
+                const { error: uploadError } = await withRetryAndTimeout(
+                    async () => supabase.storage
                         .from('campaign-images')
-                        .upload(fileName, formData.profileImage)
+                        .upload(fileName, compressedImage),
+                    {
+                        timeoutMs: 90000,
+                        maxAttempts: 3,
+                        operationName: 'Profile photo upload',
+                        onRetry: (attempt) => setSubmittingMessage(`Retrying photo upload (attempt ${attempt + 1})...`)
+                    }
                 );
 
                 if (uploadError) throw uploadError;
@@ -208,7 +215,9 @@ const StudentRegister: React.FC = () => {
                         expected_graduation: formData.expectedGraduation || null,
                         verification_status: 'pending',
                         profile_image_url: profileImageUrl
-                    })
+                    }),
+                45000,
+                'Saving student details'
             );
 
             if (studentError) {
@@ -220,15 +229,26 @@ const StudentRegister: React.FC = () => {
             // Sequential uploads for reliable mobile handling
 
             const uploadDoc = async (file: File, type: string) => {
-                const fileExt = file.name.split('.').pop();
+                // Compress if it's an image (scanned documents)
+                setSubmittingMessage(`Preparing ${type.replace('_', ' ')}...`);
+                const processedFile = await compressImage(file, 1600, 0.8);
+                
+                const fileExt = processedFile.type === 'image/jpeg' ? 'jpg' : file.name.split('.').pop();
                 const fileName = `verification/${userId}/${type}_${Date.now()}.${fileExt}`;
                 
-                // Increase timeout for large files (mobile upstream is slow)
-                const { error: uploadError, data } = await withTimeout(
-                    supabase.storage
+                setSubmittingMessage(`Uploading ${type.replace('_', ' ')}...`);
+                
+                // Use retry mechanism for uploads
+                const { error: uploadError, data } = await withRetryAndTimeout(
+                    async () => supabase.storage
                         .from('documents')
-                        .upload(fileName, file),
-                    60000 // 60s timeout for docs
+                        .upload(fileName, processedFile),
+                    {
+                        timeoutMs: 120000, // 2 minutes
+                        maxAttempts: 3,
+                        operationName: `Uploading ${type}`,
+                        onRetry: (attempt) => setSubmittingMessage(`Retrying ${type.replace('_', ' ')} upload (attempt ${attempt + 1})...`)
+                    }
                 );
 
                 if (uploadError) throw uploadError;
@@ -239,13 +259,18 @@ const StudentRegister: React.FC = () => {
 
                 console.log(`Inserting verification request for ${type}...`);
                 
-                const { error: insertError } = await withTimeout(
-                    supabase.from('verification_requests').insert({
+                const { error: insertError } = await withRetryAndTimeout(
+                    async () => supabase.from('verification_requests').insert({
                         student_id: userId,
                         document_type: type,
                         document_url: urlData.publicUrl,
                         status: 'pending'
-                    })
+                    }),
+                    {
+                        timeoutMs: 30000,
+                        maxAttempts: 2,
+                        operationName: `Registering ${type}`
+                    }
                 );
 
                 if (insertError) {
@@ -257,7 +282,6 @@ const StudentRegister: React.FC = () => {
             if (formData.idDocument) await uploadDoc(formData.idDocument, 'id_document');
             if (formData.enrollmentDocument) await uploadDoc(formData.enrollmentDocument, 'proof_of_enrollment');
             if (formData.feeStatement) {
-                setSubmittingMessage('Uploading fee statement...');
                 await uploadDoc(formData.feeStatement, 'fee_statement');
             }
 

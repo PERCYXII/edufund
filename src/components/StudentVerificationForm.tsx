@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { compressImage, withRetryAndTimeout } from '../lib/uploadHelpers';
 import { FileText, GraduationCap, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import type { User } from '../types';
@@ -18,12 +19,7 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
         feeStatement: null as File | null
     });
 
-    const withTimeout = async <T,>(promise: PromiseLike<T> | Promise<T>, ms: number = 30000): Promise<T> => {
-        return Promise.race([
-            Promise.resolve(promise),
-            new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Operation timed out. Please check your internet connection.')), ms))
-        ]);
-    };
+    const [statusMessage, setStatusMessage] = useState<string>('');
 
     const handleVerificationSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -37,12 +33,26 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
 
             for (const [type, file] of Object.entries(files)) {
                 if (file) {
-                    const fileExt = file.name.split('.').pop();
+                    // Compress images for faster upload
+                    setStatusMessage(`Compressing ${type}...`);
+                    const processedFile = await compressImage(file as File, 1600, 0.8);
+                    
+                    const fileExt = processedFile.type === 'image/jpeg' ? 'jpg' : (file as File).name.split('.').pop();
                     const fileName = `verification/${user?.id}/${type}_${Date.now()}.${fileExt}`;
 
-                    const { error: uploadError, data } = await withTimeout(supabase.storage
-                        .from('documents')
-                        .upload(fileName, file));
+                    setStatusMessage(`Uploading ${type}...`);
+                    
+                    const { error: uploadError, data } = await withRetryAndTimeout(
+                        async () => supabase.storage
+                            .from('documents')
+                            .upload(fileName, processedFile),
+                        {
+                            timeoutMs: 120000,
+                            maxAttempts: 3,
+                            operationName: `Uploading ${type}`,
+                            onRetry: (attempt) => setStatusMessage(`Retrying ${type} upload (attempt ${attempt + 1})...`)
+                        }
+                    );
 
                     if (uploadError) throw uploadError;
 
@@ -50,12 +60,20 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                         .from('documents')
                         .getPublicUrl(data.path);
 
-                    await supabase.from('verification_requests').insert({
-                        student_id: user?.id,
-                        document_type: type,
-                        document_url: publicUrl,
-                        status: 'pending'
-                    });
+                    setStatusMessage(`Registering ${type}...`);
+                    await withRetryAndTimeout(
+                        async () => supabase.from('verification_requests').insert({
+                            student_id: user?.id,
+                            document_type: type,
+                            document_url: publicUrl,
+                            status: 'pending'
+                        }),
+                        {
+                            timeoutMs: 30000,
+                            maxAttempts: 2,
+                            operationName: `Saving ${type}`
+                        }
+                    );
                 }
             }
 
@@ -205,7 +223,7 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                     {verificationSubmitting ? (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Uploading...
+                            {statusMessage || 'Uploading...'}
                         </div>
                     ) : (
                         'Submit Verification Documents'
