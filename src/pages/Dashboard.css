@@ -226,6 +226,7 @@
     flex: 1;
     margin-left: 0;
     padding: var(--spacing-6);
+    padding-bottom: var(--spacing-24); /* Extra padding for mobile bottom nav/buttons */
 }
 
 @media (min-width: 1024px) {

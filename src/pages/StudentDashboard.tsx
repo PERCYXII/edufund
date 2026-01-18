@@ -1505,6 +1505,14 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
         }
     };
 
+    // Helper for timeouts to prevent hanging on mobile
+    const withTimeout = async <T,>(promise: PromiseLike<T> | Promise<T>, ms: number = 30000): Promise<T> => {
+        return Promise.race([
+            Promise.resolve(promise),
+            new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Operation timed out. Please check your internet connection.')), ms))
+        ]);
+    };
+
     const handleSubmit = async () => {
         setSubmitting(true);
         try {
@@ -1516,9 +1524,10 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             if (formData.feeStatement) {
                 const fileExt = formData.feeStatement.name.split('.').pop();
                 const fileName = `campaigns/${user.id}/fee_statement_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage
+                const { error: uploadError } = await withTimeout(supabase.storage
                     .from('documents')
-                    .upload(fileName, formData.feeStatement);
+                    .upload(fileName, formData.feeStatement));
+                
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
                 feeStatementUrl = publicUrl;
@@ -1527,9 +1536,10 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             if (formData.idDocument) {
                 const fileExt = formData.idDocument.name.split('.').pop();
                 const fileName = `campaigns/${user.id}/id_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage
+                const { error: uploadError } = await withTimeout(supabase.storage
                     .from('documents')
-                    .upload(fileName, formData.idDocument);
+                    .upload(fileName, formData.idDocument));
+
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
                 idUrl = publicUrl;
@@ -1538,9 +1548,10 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             if (formData.enrollmentDocument) {
                 const fileExt = formData.enrollmentDocument.name.split('.').pop();
                 const fileName = `campaigns/${user.id}/enrollment_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage
+                const { error: uploadError } = await withTimeout(supabase.storage
                     .from('documents')
-                    .upload(fileName, formData.enrollmentDocument);
+                    .upload(fileName, formData.enrollmentDocument));
+
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
                 enrollmentUrl = publicUrl;
@@ -1550,9 +1561,10 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             if (formData.invoice) {
                 const fileExt = formData.invoice.name.split('.').pop();
                 const fileName = `invoices/${user.id}/${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage
+                const { error: uploadError } = await withTimeout(supabase.storage
                     .from('documents')
-                    .upload(fileName, formData.invoice);
+                    .upload(fileName, formData.invoice));
+
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName);
                 invoiceUrl = publicUrl;
@@ -1561,9 +1573,9 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             if (imageFile) {
                 const fileExt = imageFile.name.split('.').pop();
                 const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-                const { error: imgError, data: imgData } = await supabase.storage
+                const { error: imgError, data: imgData } = await withTimeout(supabase.storage
                     .from('campaign-images')
-                    .upload(fileName, imageFile);
+                    .upload(fileName, imageFile));
 
                 if (imgError) throw imgError;
 
@@ -2256,6 +2268,16 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     <p className="text-sm text-gray-500 mt-4">
                                         By confirming, you agree that this request is urgent and accurate.
                                     </p>
+                                </div>
+                            )}
+
+                            {campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) && (
+                                <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 flex items-center gap-2">
+                                    <AlertCircle size={16} className="shrink-0" />
+                                    <span>
+                                        Total breakdown (R{totalBreakdown.toLocaleString()}) must match Goal (R{parseInt(formData.goal).toLocaleString()}).
+                                        Difference: R{Math.abs(totalBreakdown - parseInt(formData.goal)).toLocaleString()}
+                                    </span>
                                 </div>
                             )}
 

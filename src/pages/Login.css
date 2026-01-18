@@ -2,14 +2,16 @@
     min-height: 100vh;
     background: var(--color-primary-50);
     display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex;
+    /* align-items: center; Removed to prevent clipping on mobile */
+    /* justify-content: center; */
     padding: var(--spacing-4);
 }
 
 .login-container {
     width: 100%;
     max-width: 420px;
+    margin: auto; /* Safely centers */
 }
 
 .login-card {

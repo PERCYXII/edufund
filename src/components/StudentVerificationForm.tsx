@@ -18,6 +18,13 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
         feeStatement: null as File | null
     });
 
+    const withTimeout = async <T,>(promise: PromiseLike<T> | Promise<T>, ms: number = 30000): Promise<T> => {
+        return Promise.race([
+            Promise.resolve(promise),
+            new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Operation timed out. Please check your internet connection.')), ms))
+        ]);
+    };
+
     const handleVerificationSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setVerificationSubmitting(true);
@@ -33,9 +40,9 @@ const StudentVerificationForm: React.FC<StudentVerificationFormProps> = ({ user,
                     const fileExt = file.name.split('.').pop();
                     const fileName = `verification/${user?.id}/${type}_${Date.now()}.${fileExt}`;
 
-                    const { error: uploadError, data } = await supabase.storage
+                    const { error: uploadError, data } = await withTimeout(supabase.storage
                         .from('documents')
-                        .upload(fileName, file);
+                        .upload(fileName, file));
 
                     if (uploadError) throw uploadError;
 
