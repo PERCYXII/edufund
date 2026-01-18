@@ -107,9 +107,18 @@ const StudentRegister: React.FC = () => {
         // Dismiss keyboard on mobile
         (document.activeElement as HTMLElement)?.blur();
 
-        if (!validateForm()) return;
-        if (!user) return;
+        console.log("Validation started...");
+        if (!validateForm()) {
+            console.log("Validation failed.");
+            setIsSubmitting(false); // Ensure loader doesn't hang if validation fails
+            return;
+        }
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
 
+        console.log("Starting mobile submission process...");
         setIsSubmitting(true);
         setSubmittingMessage('Checking connection...');
         setErrorMessage(null);
@@ -365,7 +374,7 @@ const StudentRegister: React.FC = () => {
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept="image/*"
+                                        accept="image/png, image/jpeg, image/jpg, .png, .jpg, .jpeg"
                                         onChange={(e) => handleFileChange(e, 'profileImage')}
                                         required
                                     />
@@ -376,7 +385,7 @@ const StudentRegister: React.FC = () => {
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        accept="application/pdf, image/png, image/jpeg, image/jpg, .pdf, .png, .jpg, .jpeg"
                                         onChange={(e) => handleFileChange(e, 'idDocument')}
                                         required
                                     />
@@ -387,7 +396,7 @@ const StudentRegister: React.FC = () => {
                                     <input
                                         type="file"
                                         className="split-form-input"
-                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        accept="application/pdf, image/png, image/jpeg, image/jpg, .pdf, .png, .jpg, .jpeg"
                                         onChange={(e) => handleFileChange(e, 'enrollmentDocument')}
                                         required
                                     />
