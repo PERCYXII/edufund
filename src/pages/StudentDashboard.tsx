@@ -1074,11 +1074,19 @@ const StudentDashboard: React.FC = () => {
                                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                                             <div className="flex gap-3">
                                                 <AlertCircle className="text-yellow-600 shrink-0 mt-0.5" size={20} />
-                                                <div>
+                                                <div className="flex-1">
                                                     <h4 className="font-bold text-yellow-800">You need to verify your account first</h4>
                                                     <p className="text-yellow-700 text-sm mt-1">
                                                         To ensure the safety of our platform and build trust with donors, we require all students to verified their identity and enrollment status before creating a campaign.
                                                     </p>
+                                                    {!user?.student && (
+                                                        <button 
+                                                            onClick={() => refreshUser(false)}
+                                                            className="mt-3 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1.5 rounded-md transition-colors font-medium border border-yellow-300"
+                                                        >
+                                                            Data missing? Click to Refresh Profile
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

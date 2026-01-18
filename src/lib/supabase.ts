@@ -5,7 +5,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://nsgucgicmfrudz
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZ3VjZ2ljbWZydWR6ZWR5bnVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3NjQ0MDUsImV4cCI6MjA4MzM0MDQwNX0.rimJyQRa7xnIVgxSVc5CR3hevzTfWwI0UW-Hy_w1hMM';
 
 // Create the Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+    }
+});
 
 // Export a flag to check if Supabase is configured
 // Export a flag to check if Supabase is configured

@@ -91,13 +91,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 role: role,
             };
 
+            // Helper for retrying fetches
+            const fetchWithRetry = async <T,>(fn: () => Promise<{ data: T | null, error: any }>, retries = 3, delay = 1000): Promise<{ data: T | null }> => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const { data, error } = await fn();
+                        if (!error) return { data };
+                        if (i === retries - 1) console.error("Final retry failed:", error);
+                        await new Promise(r => setTimeout(r, delay));
+                    } catch (err) {
+                        if (i === retries - 1) console.error("Final retry exception:", err);
+                        await new Promise(r => setTimeout(r, delay));
+                    }
+                }
+                return { data: null };
+            };
+
             // Fetch extended data based on role
             if (role === 'student') {
-                const { data: student } = await supabase
-                    .from('students')
-                    .select('*')
-                    .eq('id', sessionUser.id)
-                    .maybeSingle();
+                // Use retry logic for critical student profile data
+                const { data: student } = await fetchWithRetry<any>(async () => 
+                    await supabase
+                        .from('students')
+                        .select('*')
+                        .eq('id', sessionUser.id)
+                        .maybeSingle()
+                );
 
                 if (student) {
                     userData.student = {
@@ -117,16 +136,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         updatedAt: student.updated_at
                     };
                 } else {
-                    // If student record missing, we might want to scaffold a basic one or just leave it empty
-                    // so the UI knows they need to complete profile.
-                    // For now, leave 'userData.student' undefined.
+                    console.warn("Could not fetch student profile after retries. User may appear unverified.");
                 }
             } else if (role === 'donor') {
-                const { data: donor } = await supabase
-                    .from('donors')
-                    .select('*')
-                    .eq('id', sessionUser.id)
-                    .maybeSingle();
+                const { data: donor } = await fetchWithRetry<any>(async () => 
+                    await supabase
+                        .from('donors')
+                        .select('*')
+                        .eq('id', sessionUser.id)
+                        .maybeSingle()
+                );
 
                 if (donor) {
                     userData.donor = {
