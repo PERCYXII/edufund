@@ -381,10 +381,14 @@ const StudentDashboard: React.FC = () => {
 
 
     useEffect(() => {
-        fetchVerificationStatus();
+        if (user) {
+            fetchVerificationStatus();
+        }
     }, [user]);
 
     useEffect(() => {
+        if (!user) return; // Don't fetch if user not loaded yet
+        
         const loadData = async () => {
             // If we've already loaded once, use silent mode to prevent flashing loading screen
             const silent = hasInitialLoadRef.current;

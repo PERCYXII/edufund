@@ -142,10 +142,10 @@ const Browse: React.FC = () => {
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             result = result.filter(c =>
-                c.student.firstName.toLowerCase().includes(query) ||
-                c.student.lastName.toLowerCase().includes(query) ||
-                c.student.course.toLowerCase().includes(query) ||
-                c.university.name.toLowerCase().includes(query)
+                (c.student.firstName || '').toLowerCase().includes(query) ||
+                (c.student.lastName || '').toLowerCase().includes(query) ||
+                (c.student.course || '').toLowerCase().includes(query) ||
+                (c.university.name || '').toLowerCase().includes(query)
             );
         }
 
@@ -158,7 +158,7 @@ const Browse: React.FC = () => {
         if (selectedField && selectedField !== 'All Fields') {
             const field = selectedField.toLowerCase();
             result = result.filter(c => {
-                const course = c.student.course.toLowerCase();
+                const course = (c.student.course || '').toLowerCase();
                 // Basic matching logic
                 if (field.includes('engineering')) return course.includes('eng');
                 if (field.includes('medicine') || field.includes('health')) return course.includes('med') || course.includes('nurs');
