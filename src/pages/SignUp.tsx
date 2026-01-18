@@ -46,8 +46,8 @@ const SignUp: React.FC = () => {
 
             if (authError) throw authError;
 
-            success('Welcome to UniFund!', 'Your account has been created. Please log in to complete your profile.');
-            navigate('/login');
+            success('Welcome to UniFund!', 'Your account has been created. Complete your profile to get started.');
+            navigate('/register'); // Auto-logged in by Supabase, go straight to profile completion
 
         } catch (err: any) {
             console.error("Signup error:", err);

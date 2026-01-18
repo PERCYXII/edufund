@@ -628,7 +628,7 @@ const CampaignDetail: React.FC = () => {
     }, [id]);
 
     const percentFunded = useMemo(() => {
-        if (!campaign) return 0;
+        if (!campaign || campaign.goal <= 0) return 0;
         return Math.min((campaign.raised / campaign.goal) * 100, 100);
     }, [campaign]);
 

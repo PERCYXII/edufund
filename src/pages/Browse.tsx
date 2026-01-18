@@ -61,7 +61,10 @@ const Browse: React.FC = () => {
                 if (error) throw error;
 
                 if (campaignData) {
-                    const mappedCampaigns: CampaignWithStudent[] = campaignData.map((c: any) => ({
+                    // Filter out campaigns with missing student or university data (data integrity issue)
+                    const validCampaigns = campaignData.filter((c: any) => c.student && c.student.university);
+                    
+                    const mappedCampaigns: CampaignWithStudent[] = validCampaigns.map((c: any) => ({
                         id: c.id,
                         studentId: c.student_id,
                         title: c.title,

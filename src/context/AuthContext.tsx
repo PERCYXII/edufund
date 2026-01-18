@@ -242,7 +242,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             };
         };
 
-        initializeAuth();
+        let cleanupFn: (() => void) | undefined;
+        
+        initializeAuth().then(cleanup => {
+            cleanupFn = cleanup;
+        });
+
+        return () => {
+            cleanupFn?.();
+        };
     }, []);
 
     // Manage Notification Subscription

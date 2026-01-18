@@ -18,6 +18,13 @@ const Login: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        // Client-side validation
+        if (!email.trim() || !password) {
+            setError('Please enter both email and password.');
+            return;
+        }
+
         setIsLoading(true);
 
         try {
