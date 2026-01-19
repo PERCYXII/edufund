@@ -411,6 +411,7 @@ const AdminDashboard: React.FC = () => {
 
     // State
     const [verifications, setVerifications] = useState<ExtendedVerification[]>([]);
+    const [pendingMilestones, setPendingMilestones] = useState<any[]>([]);
     const [recentCampaigns, setRecentCampaigns] = useState<CampaignWithStudent[]>([]);
     const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([]);
     const [pendingDonations, setPendingDonations] = useState<any[]>([]);
@@ -420,6 +421,7 @@ const AdminDashboard: React.FC = () => {
     const [disabledProfiles, setDisabledProfiles] = useState<any[]>([]);
     const [stats, setStats] = useState({
         pendingVerifications: 0,
+        pendingMilestonesCount: 0,
         pendingCampaignsCount: 0,
         activeCampaigns: 0,
         totalFunded: 0,
@@ -590,6 +592,23 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
             }));
 
             setVerifications(mappedVerifications);
+
+            // 1b. Fetch Pending Milestones
+            const { data: milestoneData } = await supabase
+                .from('campaign_milestones')
+                .select(`
+                    *,
+                    campaign:campaigns(
+                        title,
+                        student:students(
+                            id, first_name, last_name, student_number, email,
+                            university:universities(name)
+                        )
+                    )
+                `)
+                .eq('status', 'pending_review');
+
+            setPendingMilestones(milestoneData || []);
 
             // 2a. Fetch Pending Campaigns (Explicitly)
             const { data: pendingData } = await supabase
@@ -830,7 +849,8 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
 
             setStats({
                 // Stats
-                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0),
+                pendingVerifications: mappedVerifications.length + pendingCampaignsData.length + (donationsData?.length || 0) + (milestoneData?.length || 0),
+                pendingMilestonesCount: milestoneData?.length || 0,
                 pendingCampaignsCount: pendingCampaignsData.length,
                 activeCampaigns: activeCampaignsData.length,
                 totalFunded: totalFunded,
@@ -866,6 +886,88 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
     const handleLogout = () => {
         logout();
         navigate('/');
+    };
+
+    const handleApproveMilestone = async (id: string) => {
+        if (!confirm("Approve this milestone and unpause the campaign?")) return;
+        try {
+            // 1. Get milestone details
+            const milestone = pendingMilestones.find(m => m.id === id);
+            if (!milestone) return;
+
+            // 2. Approve Milestone
+            const { error: mError } = await supabase
+                .from('campaign_milestones')
+                .update({ status: 'approved' })
+                .eq('id', id);
+
+            if (mError) throw mError;
+
+            // 3. Unpause Campaign and Update Check
+            const { error: cError } = await supabase
+                .from('campaigns')
+                .update({
+                    is_paused: false,
+                    last_milestone_cleared: milestone.milestone_percentage
+                })
+                .eq('id', milestone.campaign_id);
+
+            if (cError) throw cError;
+
+            // 4. Notify Student
+            await supabase.from('notifications').insert({
+                user_id: milestone.campaign.student.id,
+                title: 'Milestone Approved! 🚀',
+                message: `Your fee statement has been verified and your campaign is live again!`,
+                type: 'success'
+            });
+
+            toast.success("Milestone approved and campaign unpaused.");
+            setPendingMilestones(prev => prev.filter(m => m.id !== id));
+            setStats(prev => ({ ...prev, pendingMilestonesCount: Math.max(0, prev.pendingMilestonesCount - 1) }));
+
+        } catch (error: any) {
+            console.error("Error approving milestone:", error);
+            toast.error("Failed to approve milestone: " + error.message);
+        }
+    };
+
+    const handleRejectMilestone = async (id: string) => {
+        const reason = prompt("Reason for rejection:");
+        if (!reason) return;
+
+        try {
+            // 1. Get milestone details
+            const milestone = pendingMilestones.find(m => m.id === id);
+            if (!milestone) return;
+
+            // 2. Reject Milestone
+            const { error: mError } = await supabase
+                .from('campaign_milestones')
+                .update({
+                    status: 'rejected',
+                    rejection_reason: reason
+                })
+                .eq('id', id);
+
+            if (mError) throw mError;
+
+            // 3. Notify Student
+            await supabase.from('notifications').insert({
+                user_id: milestone.campaign.student.id,
+                title: 'Milestone Rejected',
+                message: `Your milestone verification was rejected. Reason: ${reason}. Please upload a correct fee statement.`,
+                type: 'error'
+            });
+
+            toast.success("Milestone rejected.");
+            setPendingMilestones(prev => prev.filter(m => m.id !== id));
+            setStats(prev => ({ ...prev, pendingMilestonesCount: Math.max(0, prev.pendingMilestonesCount - 1) }));
+
+        } catch (error: any) {
+            console.error("Error rejecting milestone:", error);
+            toast.error("Failed to reject milestone: " + error.message);
+        }
     };
 
     const handleApprove = async (id: string) => {
@@ -1986,6 +2088,74 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
                                 </div>
                             )}
 
+                            {/* NEW: Pending Milestones Section */}
+                            {pendingMilestones.length > 0 && (
+                                <div className="mb-8">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4 px-1 border-l-4 border-orange-500 pl-3">Milestone Verifications (Campaigns Paused)</h3>
+                                    <div className="admin-table-wrapper mb-6">
+                                        <table className="admin-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Student</th>
+                                                    <th>Campaign</th>
+                                                    <th>Milestone</th>
+                                                    <th>Proof</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pendingMilestones.map((milestone) => (
+                                                    <tr key={milestone.id}>
+                                                        <td>
+                                                            <div className="student-cell">
+                                                                <div className="student-avatar-table">
+                                                                    {milestone.campaign?.student?.first_name?.[0]}{milestone.campaign?.student?.last_name?.[0]}
+                                                                </div>
+                                                                <div className="student-info-table">
+                                                                    <span className="student-name-table">
+                                                                        {milestone.campaign?.student?.first_name} {milestone.campaign?.student?.last_name}
+                                                                    </span>
+                                                                    <span className="student-email-table">{milestone.campaign?.student?.email}</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td>{milestone.campaign?.title}</td>
+                                                        <td>
+                                                            <span className="badge bg-orange-100 text-orange-800 font-bold border border-orange-200">
+                                                                {milestone.milestone_percentage}% Goal Reached
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            {milestone.proof_url ? (
+                                                                <button
+                                                                    className="document-link-pill"
+                                                                    onClick={() => handleViewDocument(milestone.proof_url)}
+                                                                    title="View Fee Statement"
+                                                                >
+                                                                    <FileText size={14} /> Fee Statement
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-gray-400">No doc</span>
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            <div className="action-buttons">
+                                                                <button className="action-btn approve" onClick={() => handleApproveMilestone(milestone.id)} title="Approve & Unpause">
+                                                                    <CheckCircle size={16} />
+                                                                </button>
+                                                                <button className="action-btn reject" onClick={() => handleRejectMilestone(milestone.id)} title="Reject">
+                                                                    <XCircle size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Existing Verifications Table */}
                             {verifications.length > 0 ? (
                                 <div className="admin-table-wrapper">
@@ -2089,7 +2259,7 @@ id, student_id, document_type, document_url, id_url, enrollment_url, academic_re
                                     </table>
                                 </div>
                             ) : (
-                                pendingCampaigns.length === 0 && (
+                                pendingCampaigns.length === 0 && pendingMilestones.length === 0 && (
                                     <div className="empty-state">
                                         <CheckCircle size={48} className="empty-icon" />
                                         <h3>All caught up!</h3>

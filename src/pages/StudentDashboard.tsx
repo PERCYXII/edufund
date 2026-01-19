@@ -88,6 +88,12 @@ const StudentDashboard: React.FC = () => {
     const [loadingDonations, setLoadingDonations] = useState(false);
     const [verificationCount, setVerificationCount] = useState<number | null>(null);
 
+    // Milestone & Pause State
+    const [pendingMilestone, setPendingMilestone] = useState<any>(null);
+    const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+    const [milestoneFile, setMilestoneFile] = useState<File | null>(null);
+    const [milestoneSubmitting, setMilestoneSubmitting] = useState(false);
+
     // Verification state
     // Verification state - Refactored to component
 
@@ -176,10 +182,36 @@ const StudentDashboard: React.FC = () => {
                     enrollmentUrl: rawCampaign.enrollment_url,
                     videoUrl: rawCampaign.video_url,
                     createdAt: rawCampaign.created_at,
-                    updatedAt: rawCampaign.updated_at
+                    updatedAt: rawCampaign.updated_at,
+                    paused: rawCampaign.is_paused // Map db column to frontend type
                 };
 
                 setCampaign(mappedCampaign as unknown as CampaignWithStudent);
+
+                // Check for Pending Milestones if Paused
+                if (rawCampaign.is_paused) {
+                    const { data: milestoneData } = await supabase
+                        .from('campaign_milestones')
+                        .select('*')
+                        .eq('campaign_id', rawCampaign.id)
+                        .eq('status', 'pending_upload')
+                        .maybeSingle();
+
+                    if (milestoneData) {
+                        setPendingMilestone(milestoneData);
+                    } else {
+                        // Check for pending review or rejected
+                        const { data: otherData } = await supabase
+                            .from('campaign_milestones')
+                            .select('*')
+                            .eq('campaign_id', rawCampaign.id)
+                            .in('status', ['pending_review', 'rejected'])
+                            .maybeSingle();
+                        if (otherData) {
+                            setPendingMilestone(otherData);
+                        }
+                    }
+                }
 
                 // Fetch Recent Donations
                 const { data: donations, error: donationError } = await supabase
@@ -342,6 +374,68 @@ const StudentDashboard: React.FC = () => {
         }
     };
 
+
+    const handleMilestoneUpload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingMilestone || !milestoneFile || !campaign) return;
+
+        setMilestoneSubmitting(true);
+        try {
+            // 1. Upload Document
+            const fileExt = milestoneFile.name.split('.').pop();
+            const fileName = `milestones/${campaign.id}/${pendingMilestone.milestone_percentage}_${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(fileName, milestoneFile);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('documents')
+                .getPublicUrl(fileName);
+
+            // 2. Update Milestone Record
+            const { error: updateError } = await supabase
+                .from('campaign_milestones')
+                .update({
+                    status: 'pending_review',
+                    proof_url: publicUrl,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingMilestone.id);
+
+            if (updateError) throw updateError;
+
+            // 3. Notify Admin
+            // (Ideally this is done via database trigger, but we can do it here for now)
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            if (admins && admins.length > 0) {
+                await supabase.from('notifications').insert(
+                    admins.map(admin => ({
+                        user_id: admin.id,
+                        title: 'Milestone Verification Required',
+                        message: `Student ${user?.student?.firstName} has uploaded proof for their ${pendingMilestone.milestone_percentage}% milestone.`,
+                        type: 'verification_update'
+                    }))
+                );
+            }
+
+            toast.success("Document uploaded successfully! An admin will review it shortly.");
+            setShowMilestoneModal(false);
+            setPendingMilestone((prev: any) => ({ ...prev, status: 'pending_review' }));
+
+        } catch (err: any) {
+            console.error("Error uploading milestone:", err);
+            toast.error("Upload failed: " + err.message);
+        } finally {
+            setMilestoneSubmitting(false);
+        }
+    };
 
     const handleShowDonors = async () => {
         if (!campaign) return;
@@ -663,6 +757,57 @@ const StudentDashboard: React.FC = () => {
 
 
                                     {/* Status alerts... */}
+                                    {campaign.paused && (
+                                        <div className="alert alert-warning border-l-4 border-orange-500 bg-orange-50 mb-6 p-4 rounded-r flex items-start gap-4">
+                                            <div className="p-2 bg-orange-100 rounded-full text-orange-600 shrink-0">
+                                                <AlertCircle size={24} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-orange-800 text-lg">Campaign Paused: Funding Milestone Reached! 🎉</h4>
+                                                <p className="text-orange-700 mt-1">
+                                                    Congratulations! You've reached {pendingMilestone?.milestone_percentage || 'a'}% of your goal.
+                                                    To ensure transparency and protect donors, your campaign is temporarily paused.
+                                                </p>
+                                                {pendingMilestone?.status === 'pending_upload' && (
+                                                    <div className="mt-4">
+                                                        <p className="text-sm font-semibold text-orange-800 mb-2">
+                                                            Please upload an updated fee statement showing your current balance to continue receiving donations.
+                                                        </p>
+                                                        <button
+                                                            className="btn btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2"
+                                                            onClick={() => setShowMilestoneModal(true)}
+                                                        >
+                                                            <Upload size={18} /> Upload Fee Statement
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {pendingMilestone?.status === 'pending_review' && (
+                                                    <div className="mt-3 flex items-center gap-2 text-orange-800 bg-orange-100/50 p-2 rounded-md">
+                                                        <Clock size={16} />
+                                                        <span className="font-medium">Document uploaded. Waiting for admin approval...</span>
+                                                    </div>
+                                                )}
+                                                {pendingMilestone?.status === 'rejected' && (
+                                                    <div className="mt-4">
+                                                        <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded-md mb-3">
+                                                            <div className="flex items-center gap-2 mb-1 font-bold">
+                                                                <XCircle size={16} />
+                                                                Verification Rejected
+                                                            </div>
+                                                            <p className="text-sm">{pendingMilestone.rejection_reason}</p>
+                                                        </div>
+                                                        <button
+                                                            className="btn btn-primary bg-orange-600 hover:bg-orange-700 border-none text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2"
+                                                            onClick={() => setShowMilestoneModal(true)}
+                                                        >
+                                                            <Upload size={18} /> Re-upload Fee Statement
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {campaign.status === 'pending' && (
                                         <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-6)' }}>
                                             <Clock size={24} />
@@ -1348,6 +1493,76 @@ const StudentDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* Milestone Upload Modal */}
+            {showMilestoneModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h3 className="modal-title">Verify Funding Milestone</h3>
+                            <button onClick={() => setShowMilestoneModal(false)} className="modal-close-btn">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleMilestoneUpload}>
+                            <div className="modal-body">
+                                <div className="bg-blue-50 p-4 rounded-lg mb-4 text-sm text-blue-800">
+                                    <p>
+                                        You have reached the <strong>{pendingMilestone?.milestone_percentage}% funding milestone</strong>.
+                                        Please upload an updated fee statement to confirm your outstanding balance and continued need.
+                                    </p>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Updated Fee Statement *</label>
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            id="milestone-upload"
+                                            accept=".pdf,.jpg,.png"
+                                            required
+                                            onChange={(e) => setMilestoneFile(e.target.files?.[0] || null)}
+                                        />
+                                        <label htmlFor="milestone-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                            {milestoneFile ? (
+                                                <>
+                                                    <CheckCircle size={32} className="text-green-500" />
+                                                    <span className="font-medium text-gray-900">{milestoneFile.name}</span>
+                                                    <span className="text-xs text-gray-500">Click to change</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Upload size={32} className="text-gray-400" />
+                                                    <span className="font-medium text-primary-600">Click to upload document</span>
+                                                    <span className="text-xs text-gray-500">PDF, JPG or PNG (Max 5MB)</span>
+                                                </>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowMilestoneModal(false)}
+                                    disabled={milestoneSubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={!milestoneFile || milestoneSubmitting}
+                                >
+                                    {milestoneSubmitting ? 'Uploading...' : 'Submit Verification'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Donors Modal */}
             {showDonorsModal && (
                 <div className="modal-overlay" onClick={() => setShowDonorsModal(false)}>
@@ -1459,11 +1674,17 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
         ],
     });
 
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const hasDonations = (initialData?.raised || 0) > 0;
     const isFullyFunded = (initialData?.raised || 0) >= (initialData?.goal || 0) && (initialData?.goal || 0) > 0;
 
     const updateFormData = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+        // Clear error when user types
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: '' }));
+        }
     };
 
     const updateBreakdownAmount = (id: string, amount: number) => {
@@ -1514,6 +1735,79 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
             setImageFile(file);
             const url = URL.createObjectURL(file);
             setPreviewUrl(url);
+            if (errors.image) setErrors(prev => ({ ...prev, image: '' }));
+        }
+    };
+
+    const validateStep1 = () => {
+        const newErrors: Record<string, string> = {};
+
+        if (!formData.title.trim()) newErrors.title = "Campaign title is required";
+        if (!formData.goal || parseFloat(formData.goal) <= 0) newErrors.goal = "Valid funding goal is required";
+        if (!formData.endDate) newErrors.endDate = "End date is required";
+
+        // Image validation: Check previewUrl (covers both new uploads and existing images)
+        if (!previewUrl) newErrors.image = "Campaign image is required";
+
+        // Document validation: Check if file exists OR if we have initial URL
+        if (!formData.feeStatement && !initialData?.feeStatementUrl) newErrors.feeStatement = "Fee statement is required";
+        if (!formData.idDocument && !initialData?.idUrl) newErrors.idDocument = "ID document is required";
+        if (!formData.enrollmentDocument && !initialData?.enrollmentUrl) newErrors.enrollmentDocument = "Proof of enrollment is required";
+
+        if (formData.category === 'stationary' && !formData.invoice && !initialData?.invoiceUrl) {
+            newErrors.invoice = "Invoice is required for stationary requests";
+        }
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            const missing = Object.keys(newErrors).length;
+            toast.error(`Please fix ${missing} error${missing > 1 ? 's' : ''} to continue`);
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep2 = () => {
+        const newErrors: Record<string, string> = {};
+        if (!formData.story.trim() || formData.story.length < 50) {
+            newErrors.story = "Story must be at least 50 characters long";
+        }
+
+        setErrors(newErrors);
+        if (Object.keys(newErrors).length > 0) {
+            toast.error(newErrors.story);
+            return false;
+        }
+        return true;
+    };
+
+    const validateStep3 = () => {
+        if (campaignType === 'standard') {
+            const total = formData.fundingBreakdown.reduce((sum, item) => sum + (item.amount || 0), 0);
+            const goal = parseInt(formData.goal) || 0;
+
+            if (total !== goal) {
+                toast.error(`Total breakdown (R${total.toLocaleString()}) must match Goal (R${goal.toLocaleString()})`);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleNextStep = () => {
+        if (step === 1 && validateStep1()) {
+            setStep(2);
+            window.scrollTo(0, 0);
+        } else if (step === 2 && validateStep2()) {
+            setStep(3);
+            window.scrollTo(0, 0);
+        }
+    };
+
+    const handleFinalSubmit = () => {
+        if (validateStep3()) {
+            handleSubmit();
         }
     };
 
@@ -1873,11 +2167,12 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     type="text"
                                     id="campaign-title"
                                     name="title"
-                                    className="form-input"
+                                    className={`form-input ${errors.title ? 'form-input-error' : ''}`}
                                     placeholder={campaignType === 'quick' ? "e.g., Urgent Food Assistance Needed" : "e.g., Help me complete my Computer Science degree"}
                                     value={formData.title}
                                     onChange={(e) => updateFormData('title', e.target.value)}
                                 />
+                                {errors.title && <p className="error-message"><AlertCircle size={12} /> {errors.title}</p>}
                             </div>
 
                             <div className="form-group">
@@ -1888,7 +2183,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         type="number"
                                         id="campaign-goal"
                                         name="goal"
-                                        className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        className={`form-input amount-input ${hasDonations ? 'bg-gray-100 cursor-not-allowed' : ''} ${errors.goal ? 'form-input-error' : ''}`}
                                         placeholder={campaignType === 'quick' ? "500" : "45000"}
                                         value={formData.goal}
                                         disabled={hasDonations}
@@ -1902,6 +2197,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         }}
                                     />
                                 </div>
+                                {errors.goal && <p className="error-message"><AlertCircle size={12} /> {errors.goal}</p>}
                                 {hasDonations && (
                                     <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                         <AlertCircle size={12} />
@@ -1912,7 +2208,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
 
                             <div className="form-group">
                                 <label className="form-label">Campaign Image *</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                <div className={`border-2 border-dashed rounded-lg p-6 text-center ${errors.image ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                                     <input
                                         type="file"
                                         accept="image/*"
@@ -1941,12 +2237,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                         )}
                                     </label>
                                 </div>
+                                {errors.image && <p className="error-message text-center"><AlertCircle size={12} /> {errors.image}</p>}
                             </div>
 
                             {formData.category === 'stationary' && (
                                 <div className="form-group">
                                     <label className="form-label">Upload Invoice (Required for Stationary, Must be certified) *</label>
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center ${errors.invoice ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                                         <input
                                             type="file"
                                             accept=".pdf,.jpg,.png"
@@ -1978,6 +2275,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                             </div>
                                         )}
                                     </div>
+                                    {errors.invoice && <p className="error-message text-center"><AlertCircle size={12} /> {errors.invoice}</p>}
                                 </div>
                             )}
 
@@ -1992,7 +2290,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                     {/* Fee Statement */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">Fee Statement *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.feeStatement || initialData?.feeStatementUrl ? 'border-green-300 bg-green-50' : errors.feeStatement ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -2011,18 +2309,19 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="fee-statement-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.feeStatement ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.feeStatement ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.feeStatement ? formData.feeStatement.name : 'Upload Fee Statement'}
+                                                {(formData.feeStatement || initialData?.feeStatementUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.feeStatement || initialData?.feeStatementUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.feeStatement ? formData.feeStatement.name : initialData?.feeStatementUrl ? 'Document Uploaded' : 'Upload Fee Statement'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.feeStatement && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
 
                                     {/* ID Document */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">ID Document *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.idDocument || initialData?.idUrl ? 'border-green-300 bg-green-50' : errors.idDocument ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -2041,18 +2340,19 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="id-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.idDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.idDocument ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.idDocument ? formData.idDocument.name : 'Upload ID'}
+                                                {(formData.idDocument || initialData?.idUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.idDocument || initialData?.idUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.idDocument ? formData.idDocument.name : initialData?.idUrl ? 'Document Uploaded' : 'Upload ID'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.idDocument && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
 
                                     {/* Proof of Enrollment */}
                                     <div className="doc-upload-card">
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">Proof of Enrollment *</label>
-                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-primary-400'}`}>
+                                        <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${formData.enrollmentDocument || initialData?.enrollmentUrl ? 'border-green-300 bg-green-50' : errors.enrollmentDocument ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-primary-400'}`}>
                                             <input
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -2071,12 +2371,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                                 }}
                                             />
                                             <label htmlFor="enrollment-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                                {formData.enrollmentDocument ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
-                                                <span className={`text-xs font-medium ${formData.enrollmentDocument ? 'text-green-700' : 'text-primary-600'}`}>
-                                                    {formData.enrollmentDocument ? formData.enrollmentDocument.name : 'Upload Enrollment'}
+                                                {(formData.enrollmentDocument || initialData?.enrollmentUrl) ? <CheckCircle size={24} className="text-green-500" /> : <Upload size={24} className="text-gray-400" />}
+                                                <span className={`text-xs font-medium ${(formData.enrollmentDocument || initialData?.enrollmentUrl) ? 'text-green-700' : 'text-primary-600'}`}>
+                                                    {formData.enrollmentDocument ? formData.enrollmentDocument.name : initialData?.enrollmentUrl ? 'Document Uploaded' : 'Upload Enrollment'}
                                                 </span>
                                             </label>
                                         </div>
+                                        {errors.enrollmentDocument && <p className="error-message justify-center"><AlertCircle size={12} /> Required</p>}
                                     </div>
                                 </div>
                             </div>
@@ -2116,17 +2417,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    onClick={() => setStep(2)}
-                                    disabled={
-                                        !formData.title ||
-                                        !formData.goal ||
-                                        !formData.endDate ||
-                                        !imageFile ||
-                                        !formData.feeStatement ||
-                                        !formData.idDocument ||
-                                        !formData.enrollmentDocument ||
-                                        (formData.category === 'stationary' && !formData.invoice)
-                                    }
+                                    onClick={handleNextStep}
                                 >
                                     Continue to Your Story
                                 </button>
@@ -2147,12 +2438,13 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <textarea
                                     id="campaign-story"
                                     name="story"
-                                    className="form-input form-textarea"
+                                    className={`form-input form-textarea ${errors.story ? 'form-input-error' : ''}`}
                                     rows={8}
                                     placeholder="Tell donors about yourself, your background, your goals, and why you need their support..."
                                     value={formData.story}
                                     onChange={(e) => updateFormData('story', e.target.value)}
                                 />
+                                {errors.story && <p className="error-message"><AlertCircle size={12} /> {errors.story}</p>}
                                 <p className="form-hint">{formData.story.length}/1000 characters (minimum 200 recommended)</p>
                             </div>
 
@@ -2178,8 +2470,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    onClick={() => setStep(3)}
-                                    disabled={formData.story.length < 50}
+                                    onClick={handleNextStep}
                                 >
                                     Continue to Funding
                                 </button>
@@ -2305,8 +2596,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-lg"
-                                    disabled={campaignType === 'standard' && totalBreakdown !== parseInt(formData.goal) || submitting || isFullyFunded}
-                                    onClick={handleSubmit}
+                                    disabled={submitting || isFullyFunded}
+                                    onClick={handleFinalSubmit}
                                 >
                                     {submitting ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Launch Campaign')}
                                 </button>
